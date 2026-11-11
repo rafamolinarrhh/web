@@ -144,7 +144,7 @@ section.block{padding-block:80px}
 .cl-steps{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:22px;color:var(--muted);font-size:.95rem;list-style:none;padding:0}
 .cl-steps li::before{content:"✓ ";color:var(--orange);font-weight:700}
 @media (max-width:860px){.cl-grid{grid-template-columns:1fr}}
-.contact-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.contact-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;max-width:760px}
 .contact-grid>*{min-width:0}
 .c-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:6px}
 .c-card .k{font-family:var(--display);font-weight:700;font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
@@ -374,12 +374,12 @@ header.hide{transform:translateY(-110%)}
           <span class="tag">Recomendado</span>
           <h3>Solicitar créditos</h3>
           <p>Rellena el formulario con tu empresa, tu CIF y los créditos que necesitas. Te confirmo la recarga por correo.</p>
-          <a class="btn btn-primary" href="https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=I-Eisd1pW0WqxEuF7Asw1Y0KTiF7SPxOpuvywG9zs4ZUNkpPNFdLRkpRWTBRNFpKNk9FV1VEMVU4MS4u" target="_blank" rel="noopener">Pedir recarga</a>
+          <a class="btn btn-primary" href="recarga.html">Pedir recarga</a>
         </article>
         <article class="cl-card">
-          <h3>Por WhatsApp</h3>
-          <p>¿Lo prefieres rápido? Escríbeme indicando la empresa y el número de créditos.</p>
-          <a class="btn btn-ghost" href="https://wa.me/34677070525?text=Hola%20Rafa%2C%20soy%20cliente%20de%20Time%20Laboris%20y%20necesito%20recargar%20cr%C3%A9ditos.%20Empresa%3A%20" target="_blank" rel="noopener">Abrir WhatsApp</a>
+          <h3>Por correo</h3>
+          <p>¿Lo prefieres así? Escríbeme indicando la empresa, el CIF y el número de créditos.</p>
+          <a class="btn btn-ghost" href="mailto:rafa@rafamolinarrhh.es?subject=Recarga%20de%20cr%C3%A9ditos%20Time%20Laboris">Escribir un correo</a>
         </article>
         <article class="cl-card">
           <h3>Dudas o incidencias</h3>
@@ -403,9 +403,8 @@ header.hide{transform:translateY(-110%)}
         <p>Te respondo en el día. La primera reunión y la demostración no tienen coste.</p>
       </div>
       <div class="contact-grid">
-        <div class="c-card"><span class="k">Teléfono y WhatsApp</span><a class="v" href="tel:+34677070525">677 07 05 25</a><small>L-V 9:00-13:30 · lunes y miércoles por la tarde</small><button class="copy" type="button" data-copy="677070525">Copiar</button></div>
         <div class="c-card"><span class="k">Correo</span><a class="v" href="mailto:rafa@rafamolinarrhh.es">rafa@rafamolinarrhh.es</a><small>Para presupuestos y altas</small><button class="copy" type="button" data-copy="rafa@rafamolinarrhh.es">Copiar</button></div>
-        <div class="c-card"><span class="k">Cita online</span><a class="v" href="https://bookings.cloud.microsoft/book/RafaMolinaRRHH2@rafamolinarrhh.es/" target="_blank" rel="noopener">Agenda una cita</a><small>Presencial, por teléfono o por Teams</small></div>
+        <div class="c-card"><span class="k">Cita online</span><a class="v" href="https://bookings.cloud.microsoft/book/RafaMolinaRRHH2@rafamolinarrhh.es/" target="_blank" rel="noopener">Agenda una cita</a><small>Presencial, por teléfono o por Teams · L-V 9:00-13:30</small></div>
       </div>
     </div>
   </section>
@@ -416,8 +415,8 @@ header.hide{transform:translateY(-110%)}
     <span>© 2026 Rafa Molina RRHH · rafamolinarrhh.es</span>
     <details id="aviso-legal">
       <summary>Aviso legal y privacidad</summary>
-      <p>Titular: Rafael Molina García, NIF 28812450M, con domicilio en C/ Profesor Manuel Clavero Arévalo, 8, esc. 5, 2.º B, 41019 Sevilla. Contacto: rafa@rafamolinarrhh.es · 677 07 05 25.</p>
-      <p>Esta web es informativa. No usa cookies ni recoge datos mediante formularios. Si me escribes o me llamas, usaré tus datos solo para responderte y, si llegamos a trabajar juntos, para gestionar el servicio. Puedes ejercer tus derechos de acceso, rectificación y supresión escribiendo a rafa@rafamolinarrhh.es. Time Laboris, Netcontrata, Gesta, eHogar, DelegaRed y eNotifica son marcas de sus respectivos titulares.</p>
+      <p>Titular: Rafael Molina García, NIF 28812450M, con domicilio en C/ Profesor Manuel Clavero Arévalo, 8, esc. 5, 2.º B, 41019 Sevilla. Contacto: rafa@rafamolinarrhh.es.</p>
+      <p>Esta web no usa cookies propias. Los datos que envíes en el formulario de solicitud de créditos (gestionado con Microsoft Forms) se usan solo para tramitar la recarga y emitir la factura. Si me escribes o me llamas, usaré tus datos solo para responderte y, si llegamos a trabajar juntos, para gestionar el servicio. Puedes ejercer tus derechos de acceso, rectificación y supresión escribiendo a rafa@rafamolinarrhh.es. Time Laboris, Netcontrata, Gesta, eHogar, DelegaRed y eNotifica son marcas de sus respectivos titulares.</p>
     </details>
   </div>
 </footer>
