@@ -1427,7 +1427,7 @@ document.addEventListener('input', e => { if (e.target.dataset && e.target.datas
 /* ===== arranque: acceso, nube y demostración ===== */
 const CONF = window.CIERRE_CONFIG || {};
 const CLOUD = !!(CONF.supabaseUrl && CONF.supabaseKey && window.supabase);
-let SB = null, SESSION = null;
+let SB = null, SESSION = null, DEMO = false;
 const HASH_TYPE = new URLSearchParams(location.hash.slice(1)).get('type');
 
 function attach(col){
@@ -1486,7 +1486,8 @@ function authView(mode, msg, err){
     <label>Email<input type="email" id="au-e" autocomplete="username" required></label>
     <label>Contraseña<input type="password" id="au-p" autocomplete="current-password" required></label>
     <button class="go" type="submit">Entrar</button></form>
-    <button class="alt" id="au-forgot">¿Has olvidado la contraseña?</button>`;
+    <button class="alt" id="au-forgot">¿Has olvidado la contraseña?</button>
+    <button class="alt" id="au-demo">Ver la demostración con datos de ejemplo</button>`;
   else if (mode === 'forgot') body = `<h2>Recupera el acceso</h2><p>Te enviaremos un enlace para crear una contraseña nueva.</p>${m}<form id="au-f" class="stack" style="gap:14px">
     <label>Email<input type="email" id="au-e" autocomplete="username" required></label>
     <button class="go" type="submit">Enviar enlace</button></form>
@@ -1527,9 +1528,9 @@ async function authSubmit(e){
 function paintWho(){
   const w = $('#who'); if (!w) return;
   const sub = $('#brand-sub'); if (sub) sub.textContent = (S.docs.get('ajustes') || {}).marca || 'Time Laboris · distribuidores';
-  const who = CLOUD ? (SESSION && SESSION.user.email) : 'Demostración';
+  const who = DEMO ? 'Demostración' : (SESSION && SESSION.user.email);
   w.innerHTML = who ? `<span>${esc(who)}</span><button class="btn ghost" id="who-out">Salir</button>` : '';
-  const b = $('#who-out'); b && (b.onclick = async () => { if (CLOUD) { await SB.auth.signOut(); location.reload(); } else { $('#who').innerHTML = ''; authView('login'); } });
+  const b = $('#who-out'); b && (b.onclick = async () => { if (!DEMO) await SB.auth.signOut(); location.reload(); });
 }
 
 function startCloud(session){
@@ -1537,7 +1538,7 @@ function startCloud(session){
   attach(cloudCol(SB, session.user.id)); paintWho();
 }
 function startDemo(){
-  $('#auth').hidden = true; S.mode = 'local'; loadLocal();
+  DEMO = true; $('#auth').hidden = true; S.mode = 'local'; loadLocal();
   if (!S.docs.size) { S.docs = new Map(demoSeed().map(d => [d.id, d])); saveLocal(); }
   const ms = [...S.docs.values()].filter(d => d.kind === 'mov').map(d => d.mes).sort(); if (ms.length && !S.docs.has('mov_' + S.mes)) S.mes = ms[ms.length - 1];
   render(); paintWho();
