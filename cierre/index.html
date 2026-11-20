@@ -72,6 +72,7 @@ main{padding-block:26px 90px}
 .kpi .v{font-family:var(--f-mono);font-size:21px;font-weight:500;white-space:nowrap}
 .kpi .s{font-size:12.5px;color:var(--muted)}
 .kpi.good .v{color:var(--accent)}
+.kpi.warn .v{color:var(--warn)}
 .grid2{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start}
 @media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;min-width:0}
@@ -144,6 +145,9 @@ textarea{resize:vertical}
 .sec-title{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:26px 0 10px}
 .sec-title h3{font-size:18px}
 .sec-title p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.logo-zone{border:1px dashed var(--line-strong);border-radius:8px;min-height:68px;display:flex;align-items:center;justify-content:center;padding:8px 12px;color:var(--muted);font-size:13px;text-align:center;background:var(--bg);cursor:pointer}
+.logo-zone:focus{border-color:var(--accent);outline:none;background:var(--accent-soft)}
+.logo-zone img{max-height:60px;max-width:100%;background:#fff;border-radius:4px;padding:2px}
 .who{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);white-space:nowrap}
 .who .btn{padding:4px 10px;font-size:12.5px}
 .auth{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#1E3760 0%,#2F5288 60%,#3A63A0 100%);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
@@ -176,7 +180,7 @@ textarea{resize:vertical}
     <button class="tab" data-nav="clientes">Clientes</button>
     <button class="tab" data-nav="presupuestos">Presupuestos</button>
     <button class="tab" data-nav="escala">Escala de compra</button>
-    <button class="tab" data-nav="simulador">Simulador</button>
+    <button class="tab" data-nav="certificados">Certificados</button>
     <button class="tab" data-nav="ajustes">Ajustes</button>
   </nav>
   <label class="monthsel"><span class="hint" style="font-size:12.5px;color:var(--muted)">Mes</span><select id="sel-mes" aria-label="Mes"></select></label>
@@ -253,9 +257,9 @@ async function safe(fn, ok){
   catch (e) { const c = e && e.code; toast(c === 'quota_exceeded' ? 'Se ha llenado el espacio de datos. Descarga una copia y borra meses antiguos.' : c === 'invalid_argument' ? 'No se pudo guardar: sin permiso o datos no válidos.' : 'No se pudo guardar. Revisa la conexión e inténtalo de nuevo.', true); console.error(e); return false; }
 }
 async function saveFile(name, data){
-  if (DL) { try { await DL.save({ filename: name, data }); toast('Archivo guardado'); } catch (e) { if (e && e.code !== 'declined') toast('No se pudo descargar el archivo en esta vista.', true); } return; }
-  try { const blob = data instanceof Blob ? data : new Blob([data]); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
-  catch (e) { toast('La descarga no está disponible en esta vista.', true); }
+  if (DL) { try { await DL.save({ filename: name, data }); toast('Archivo guardado'); return true; } catch (e) { const c = e && e.code; if (c === 'declined') return false; toast(c === 'rejected_extension' ? 'Este tipo de archivo no se puede descargar desde aquí.' : c === 'rate_limited' ? 'Ya hay una descarga pendiente de confirmar. Acéptala o espera un momento.' : 'No se pudo descargar el archivo en esta vista.', true); return false; } }
+  try { const blob = data instanceof Blob ? data : new Blob([data]); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); return true; }
+  catch (e) { toast('La descarga no está disponible en esta vista.', true); return false; }
 }
 
 /* ===== UI básica ===== */
@@ -526,6 +530,7 @@ function viewResumen(){
   if (com.base && !com.st.estado) tasks.push(['var(--warn)', 'Factura de comisión por emitir', `${money(com.total)} a Creative Quality (${c.comisionPct} % de ${money(com.ventas)})`, 'cierre', 'Abrir']);
   if (sepaPend.length) tasks.push(['var(--info)', `Remesa SEPA lista: ${sepaPend.length} recibos`, money(sepaPend.reduce((a, f) => a + f.total, 0)), 'cobros', 'Generar']);
   if (sepaFalta.length) tasks.push(['var(--warn)', `${sepaFalta.length} cliente${sepaFalta.length > 1 ? 's' : ''} sin IBAN o mandato`, 'No entrarán en la remesa hasta completarlos.', 'clientes', 'Completar']);
+  { const pf = certPorFacturar(), rn = certRenov(); if (pf.length) tasks.push(['var(--warn)', `${pf.length} certificado${pf.length > 1 ? 's' : ''} sin confirmar facturación`, 'Comprados a Creative Quality y sin marcar como facturados al cliente.', 'certificados', 'Ver']); if (rn.length) tasks.push(['var(--info)', `${rn.length} certificado${rn.length > 1 ? 's' : ''} por renovar`, rn.slice(0, 2).map(certNombre).join(', '), 'certificados', 'Ver']); }
   if (dev.length) tasks.push(['var(--bad)', `${dev.length} recibo${dev.length > 1 ? 's' : ''} devuelto${dev.length > 1 ? 's' : ''}`, money(dev.reduce((a, i) => a + i.importe, 0)) + ' por reclamar', 'cobros', 'Ver']);
   const saldo = saldoCreditos();
   return `<div class="head"><div><h2>${esc(mesLabel(m)[0].toUpperCase() + mesLabel(m).slice(1))}</h2><p>${hist ? 'Mes histórico: lo facturó Creative Quality. El margen es el que habrías tenido facturando tú.' : m < c.desde ? 'Mes anterior a tu inicio como distribuidor.' : 'Tu cierre del mes.'}</p></div>
@@ -626,6 +631,15 @@ function viewMovs(){
   const opts = '<option value="">Asignar a…</option>' + cs.map(x => `<option value="${esc(x.id)}">${esc(x.nombre)}</option>`).join('');
   return `<div class="head"><div><h2>Movimientos de ${esc(mesLabel(m))}</h2><p>Recargas a clientes, compras de créditos y ventas de otras soluciones.</p></div>
     <div class="row"><button class="btn" data-act="compra">+ Compra de créditos</button><button class="btn" data-act="recarga">+ Recarga manual</button><button class="btn primary" data-act="import">Importar Excel</button></div></div>
+  <div class="panel api-panel" style="margin-bottom:18px"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Importación automática desde la API de Time Laboris <span class="chip c-info">Pendiente de Time Laboris</span></h3>
+    <p class="sub" style="margin-top:6px">Hoy el único paso manual del cierre es exportar cada mes el Excel de transferencias del portal e importarlo aquí. Con una API para el perfil distribuidor, las recargas llegarían solas cada día y las facturas, remesas y comisiones se prepararían sin tocar nada.</p></div>
+    <button class="btn" disabled title="Disponible cuando Time Laboris publique la API">Sincronizar con Time Laboris</button></div>
+    <div class="steps" style="margin-top:6px">
+      <div class="step"><b>Asignaciones de créditos</b>Fecha, empresa, CIF, código de cliente y créditos de cada recarga o transferencia, filtrable por fechas.</div>
+      <div class="step"><b>Compras del distribuidor</b>Créditos comprados a Time Laboris, fecha, número de factura y precio.</div>
+      <div class="step"><b>Saldo y consumo</b>Saldo actual de cada empresa y trabajadores activos, para avisar antes de que se quede sin créditos.</div>
+      <div class="step"><b>Acceso seguro</b>Una clave por distribuidor, solo de lectura, con entorno de pruebas.</div>
+    </div></div>
   <div class="panel" style="margin-bottom:18px"><h3>Qué puedes importar</h3><div class="steps" style="margin-top:10px">
     <div class="step"><b>Portal Time Laboris</b>«Créditos» → «Exportar transferencias a empresas (Excel)». Trae tus recargas a clientes y tus compras.</div>
     <div class="step"><b>Ventas de Creative Quality</b>El listado «Ventas por vendedor». Trae créditos y ventas de otras soluciones para la comisión.</div>
@@ -715,7 +729,7 @@ function viewAjustes(){
         <label class="field"><span>CIF</span><input id="a-cqc" data-a="cqCif" value="${v('cqCif')}"></label>
       </div></div>
       <div class="panel"><h3>Copia de seguridad</h3><p class="sub">Todos tus clientes, movimientos, cierres y remesas en un archivo.</p><div class="row"><button type="button" class="btn" data-act="backup">Descargar copia</button><label class="btn" for="bk-in">Restaurar copia…</label><input type="file" id="bk-in" accept=".json" hidden></div>
-        <p class="note" style="margin-top:14px">Los datos se guardan en tu cuenta de Claude y solo los ves tú.</p></div>
+        <p class="note" style="margin-top:14px">Los datos se guardan en tu cuenta y solo los ves tú.</p></div>
     </div>
     <div class="row" style="justify-content:flex-end"><button class="btn primary">Guardar ajustes</button></div>
   </form>`;
@@ -728,11 +742,11 @@ function render(){
   if (S.dirty && (S.view === 'ajustes' || S.view === 'escala' || (S.view === 'presupuestos' && (S.editPre || PRE.cat)) || (S.view === 'clientes' && S.editCli))) return;
   const ae = document.activeElement, fid = ae && ae.id, pos = ae && ae.selectionStart;
   let h = banner();
-  h += S.mode === 'loading' ? '<div class="empty"><p>Cargando tus datos…</p></div>' : ({ resumen: viewResumen, libro: viewLibro, cierre: viewCierre, cobros: viewCobros, asesorias: viewAsesorias, movs: viewMovs, clientes: viewClientes, presupuestos: viewPresupuestos, escala: viewEscala, simulador: viewSim, ajustes: viewAjustes })[S.view]();
+  h += S.mode === 'loading' ? '<div class="empty"><p>Cargando tus datos…</p></div>' : ({ resumen: viewResumen, libro: viewLibro, cierre: viewCierre, cobros: viewCobros, asesorias: viewAsesorias, movs: viewMovs, clientes: viewClientes, presupuestos: viewPresupuestos, escala: viewEscala, certificados: viewCert, simulador: viewSim, ajustes: viewAjustes })[S.view]();
   $('#main').innerHTML = h;
   if (fid && document.getElementById(fid)) { const el = document.getElementById(fid); el.focus(); try { pos != null && el.setSelectionRange(pos, pos); } catch (e) {} }
 }
-const VIEWS = ['resumen', 'libro', 'cierre', 'cobros', 'asesorias', 'movs', 'clientes', 'presupuestos', 'escala', 'simulador', 'ajustes'];
+const VIEWS = ['resumen', 'libro', 'cierre', 'cobros', 'asesorias', 'movs', 'clientes', 'presupuestos', 'escala', 'certificados', 'simulador', 'ajustes'];
 function go(v){ S.view = v; S.dirty = false; S.editCli = null; S.editPre = null; PRE.cat = false; PRE.catItems = null; if (location.hash !== '#' + v) location.hash = v; render(); scrollTo(0, 0); }
 addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== S.view) { S.view = v; S.dirty = false; S.editCli = null; render(); } });
 
@@ -800,6 +814,7 @@ function exportClientes(){
 document.addEventListener('click', e => {
   const n = e.target.closest('[data-nav]'); if (n) { go(n.dataset.nav); return; }
   const cl = e.target.closest('[data-cli]'); if (cl) { S.editCli = clone(cliById(cl.dataset.cli)); S.dirty = false; render(); return; }
+  if (e.target.closest('a[href]')) return;
   const a = e.target.closest('[data-act]'); if (a && ACTS[a.dataset.act] && !a.disabled) { e.preventDefault(); ACTS[a.dataset.act](a); }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-cli]')) e.target.click(); if (e.key === 'Escape') $('#modal-root').innerHTML = ''; });
@@ -853,15 +868,15 @@ async function restore(file){
 
 
 /* ===== libro de facturas ===== */
-const OD = 'https://rafamolinarrhh-my.sharepoint.com/personal/rafa_rafamolinarrhh_es/Documents/';
+const OD = '';
 const LIB = { tipo: 'emitida', tri: '', q: '', year: '2026' };
 const libro = y => (S.docs.get('libro_' + y) || {}).items || [];
 const libroYears = () => [...S.docs.values()].filter(d => d.kind === 'libro').map(d => d.year).sort().reverse();
-function pdfLink(o){ if (!o.ruta) return ''; return `<a class="btn sm ghost" href="${esc(OD + o.ruta.split('/').map(encodeURIComponent).join('/'))}" target="_blank" rel="noopener" title="Abrir PDF en OneDrive">PDF</a>`; }
+function pdfLink(o){ if (!o.ruta || !OD) return ''; return `<a class="btn sm ghost" href="${esc(OD + o.ruta.split('/').map(encodeURIComponent).join('/'))}" target="_blank" rel="noopener" title="Abrir PDF en OneDrive">PDF</a>`; }
 function viewLibro(){
   const ys = libroYears(); if (ys.length && !ys.includes(LIB.year)) LIB.year = ys[0];
   const all = libro(LIB.year);
-  if (!all.length) return `<div class="head"><div><h2>Libro de facturas</h2></div></div><div class="empty"><h3>Aún no hay libro cargado</h3><p>Pídeme en el chat que cargue tus facturas emitidas y gastos de FacturasCloud.</p></div>`;
+  if (!all.length) return `<div class="head"><div><h2>Libro de facturas</h2></div></div><div class="empty"><h3>Aún no hay libro cargado</h3><p>Aquí verás tus facturas emitidas y recibidas cuando las cargues desde tu programa de facturación.</p></div>`;
   const qs = Array.from({ length: 4 }, (_, i) => { const t = i + 1, e = all.filter(o => o.tipo === 'emitida' && o.trimestre === t), r = all.filter(o => o.tipo === 'recibida' && o.trimestre === t);
     const sum = (a, k) => r2(a.reduce((x, o) => x + (o[k] || 0), 0));
     return { t, nE: e.length, nR: r.length, baseE: sum(e, 'base'), ivaE: sum(e, 'iva'), irpf: -sum(e, 'irpf'), baseR: sum(r, 'base'), ivaR: sum(r, 'iva') }; });
@@ -887,7 +902,7 @@ function viewLibro(){
       <div style="overflow-x:auto"><table><thead><tr><th>Trim.</th><th class="r">Ingresos</th><th class="r">IVA repercutido</th><th class="r">Gastos</th><th class="r">IVA soportado</th><th class="r">Resultado IVA</th><th class="r">Retenciones</th></tr></thead><tbody>
       ${qs.map(q => `<tr><td><b>${q.t}T</b></td><td class="r num">${money(q.baseE)}</td><td class="r num">${money(q.ivaE)}</td><td class="r num">${money(q.baseR)}</td><td class="r num">${money(q.ivaR)}</td><td class="r num" style="color:${q.ivaE - q.ivaR < 0 ? 'var(--accent)' : 'var(--ink)'}">${money(q.ivaE - q.ivaR)}</td><td class="r num">${money(q.irpf)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td>Año</td><td class="r num">${money(tot.baseE)}</td><td class="r num">${money(tot.ivaE)}</td><td class="r num">${money(tot.baseR)}</td><td class="r num">${money(tot.ivaR)}</td><td class="r num">${money(tot.ivaE - tot.ivaR)}</td><td class="r num">${money(tot.irpf)}</td></tr></tfoot></table></div>
-      ${veh ? `<p class="note" style="margin-top:12px"><b>Ojo con el vehículo:</b> la compra del Kia Niro (${money(veh.base)} de base, ${money(veh.iva)} de IVA) va en el 3T. En un turismo, Hacienda suele admitir solo el 50 % del IVA y se amortiza en varios años en lugar de gastarse de golpe. Confírmalo con tu asesoría.</p>` : ''}
+      ${veh ? `<p class="note" style="margin-top:12px"><b>Ojo con el vehículo:</b> la compra del vehículo (${money(veh.base)} de base, ${money(veh.iva)} de IVA) va en el 3T. En un turismo, Hacienda suele admitir solo el 50 % del IVA y se amortiza en varios años en lugar de gastarse de golpe. Confírmalo con tu asesoría.</p>` : ''}
     </div>
     <div class="stack">
       <div class="panel"><h3>Ingresos por actividad</h3><table><tbody>${catRows('emitida')}</tbody></table></div>
@@ -915,6 +930,8 @@ document.addEventListener('change', e => { if (e.target.id === 'lib-tri') { LIB.
 /* ===== comisiones a asesorías ===== */
 const asesorias = () => [...S.docs.values()].filter(d => d.kind === 'asesoria').sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
 const ASE = { per: null, open: '' };
+const firmadoHTML = a => { const f = a.firmado; if (!f) return '<span class="flag warn">Sin acuerdo</span>'; if (f.sinFirmar) return '<span class="flag warn">Acuerdo sin firmar</span>'; if (!OD) return '<span class="flag n">Acuerdo firmado</span>'; return `<a href="${esc(OD + f.ruta.split('/').map(encodeURIComponent).join('/'))}" target="_blank" rel="noopener" title="Abrir el PDF en OneDrive">Acuerdo firmado${f.fecha ? ' ' + fdate(f.fecha) : ''}</a>`; };
+
 function perActual(){ const m = thisMonth(); return m.slice(0, 4) + '-' + (+m.slice(5, 7) <= 6 ? '1' : '2'); }
 function perMeses(p){ const y = p.slice(0, 4), h = p.slice(5); const out = []; for (let i = h === '1' ? 1 : 7; i <= (h === '1' ? 6 : 12); i++) out.push(y + '-' + pad(i)); return out; }
 const perLabel = p => (p.slice(5) === '1' ? '1.er semestre (ene–jun) ' : '2.º semestre (jul–dic) ') + p.slice(0, 4);
@@ -934,17 +951,17 @@ function viewAsesorias(){
   const p = ASE.per, rows = comisionesPer(p), tot = rows.reduce((a, r) => ({ v: a.v + r.ventas, c: a.c + r.comision }), { v: 0, c: 0 });
   const meses = perMeses(p), hasta = meses[meses.length - 1] > thisMonth() ? thisMonth() : meses[meses.length - 1];
   const stChip = st => st.estado === 'pagada' ? chip('c-ok', 'Pagada') : st.estado === 'facturada' ? chip('c-info', 'Factura recibida') : chip('c-warn', 'Pendiente');
-  if (!rows.length) return `<div class="head"><div><h2>Comisiones a asesorías</h2></div></div><div class="empty"><h3>Sin asesorías</h3><p>Pídeme en el chat que cargue tus asesorías y sus empresas.</p></div>`;
-  return `<div class="head"><div><h2>Comisiones a asesorías</h2><p>${esc(perLabel(p))} · recargas de ${esc(mesLabel(meses.find(m => m >= cfg().desde) || meses[0]))} a ${esc(mesLabel(hasta))}${hasta < meses[meses.length - 1] ? ' (semestre en curso)' : ''}. Cada asesoría te factura su comisión al cerrar el semestre.</p></div>
-    <div class="row"><select id="ase-per" aria-label="Semestre">${ps.map(x => `<option value="${x}" ${x === p ? 'selected' : ''}>${esc(perLabel(x))}</option>`).join('')}</select><button class="btn" data-act="ase-xlsx">Descargar liquidación (Excel)</button></div></div>
+  if (!rows.length) return `<div class="head"><div><h2>Comisiones a asesorías</h2></div></div><div class="empty"><h3>Sin asesorías</h3><p>Añade tus asesorías colaboradoras y vincula sus empresas desde Clientes.</p><div class="row"><button class="btn primary" data-act="ase-edit">+ Nueva asesoría</button><button class="btn" data-act="ase-acuerdo">Nuevo acuerdo de colaboración</button></div></div>`;
+  return `<div class="head"><div><h2>Comisiones a asesorías</h2><p>${esc(perLabel(p))} · recargas de ${esc(mesLabel(meses.find(m => m >= cfg().desde) || meses[0]))} a ${esc(mesLabel(hasta))}${hasta < meses[meses.length - 1] ? ' (semestre en curso)' : ''}. Cada asesoría te factura su comisión al cerrar el semestre: en julio la del 1.er semestre y en enero la del 2.º.</p></div>
+    <div class="row"><select id="ase-per" aria-label="Semestre">${ps.map(x => `<option value="${x}" ${x === p ? 'selected' : ''}>${esc(perLabel(x))}</option>`).join('')}</select><button class="btn" data-act="ase-xlsx">Descargar liquidación (Excel)</button><button class="btn" data-act="ase-acuerdo">Nuevo acuerdo</button><button class="btn primary" data-act="ase-edit">+ Nueva asesoría</button></div></div>
   <div class="kpis"><div class="kpi"><label>Ventas de sus empresas</label><span class="v">${money(tot.v)}</span><span class="s">sin IVA, en el semestre</span></div>
     <div class="kpi"><label>Comisiones a pagar</label><span class="v">${money(tot.c)}</span><span class="s">${rows.filter(r => r.comision).length} asesorías con ventas</span></div>
     <div class="kpi"><label>Pendientes de pago</label><span class="v">${money(rows.filter(r => r.st.estado !== 'pagada').reduce((a, r) => a + r.comision, 0))}</span><span class="s">${rows.filter(r => r.comision && r.st.estado !== 'pagada').length} liquidaciones</span></div></div>
   <div class="tbl-wrap"><table><thead><tr><th>Asesoría</th><th class="r">Empresas</th><th class="r">Ventas</th><th class="r">%</th><th class="r">Comisión</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${rows.map(r => `<tr class="click" data-act="ase-open" data-k="${esc(r.a.codigo)}"><td><div class="cn">${esc(r.a.nombre)}</div><div class="cs">Código CQ ${esc(r.a.codigo)}${r.a.cif ? ' · ' + esc(r.a.cif) : ''}</div></td><td class="r num">${r.nEmp}</td><td class="r num">${money(r.ventas)}</td><td class="r num">${r.pct}</td><td class="r num"><b>${money(r.comision)}</b></td><td>${r.comision ? stChip(r.st) : '<span class="cs">Sin ventas</span>'}${r.st.num ? `<div class="cs mono">${esc(r.st.num)}</div>` : ''}</td>
-    <td class="r">${r.comision ? `<button class="btn sm" data-act="ase-estado" data-k="${esc(r.a.codigo)}">${r.st.estado === 'pagada' ? 'Editar' : r.st.estado === 'facturada' ? 'Marcar pagada' : 'Factura recibida'}</button>` : ''}</td></tr>
+  ${rows.map(r => `<tr class="click" data-act="ase-open" data-k="${esc(r.a.codigo)}"><td><div class="cn">${r.a.logo ? `<img src="${esc(r.a.logo)}" alt="" style="height:18px;max-width:64px;vertical-align:-4px;margin-right:8px;background:#fff;border-radius:3px">` : ''}${esc(r.a.nombre)}</div><div class="cs">Código CQ ${esc(r.a.codigo)}${r.a.cif ? ' · ' + esc(r.a.cif) : ''}${r.a.web ? ` · <a href="${esc(/^https?:/i.test(r.a.web) ? r.a.web : 'https://' + r.a.web)}" target="_blank" rel="noopener">${esc(r.a.web.replace(/^https?:\/\//i, '').replace(/\/$/, ''))}</a>` : ''}${r.a.acuerdo ? (r.a.acuerdo.onedrive ? ` · <a href="${esc(r.a.acuerdo.onedrive.url)}" target="_blank" rel="noopener">Acuerdo generado ${fdate(r.a.acuerdo.fecha)}</a>` : ' · Acuerdo generado ' + fdate(r.a.acuerdo.fecha)) : ''} · ${firmadoHTML(r.a)}</div></td><td class="r num">${r.nEmp}</td><td class="r num">${money(r.ventas)}</td><td class="r num">${r.pct}</td><td class="r num"><b>${money(r.comision)}</b></td><td>${r.comision ? stChip(r.st) : '<span class="cs">Sin ventas</span>'}${r.st.num ? `<div class="cs mono">${esc(r.st.num)}</div>` : ''}</td>
+    <td class="r">${r.comision ? `<button class="btn sm" data-act="ase-estado" data-k="${esc(r.a.codigo)}">${r.st.estado === 'pagada' ? 'Editar' : r.st.estado === 'facturada' ? 'Marcar pagada' : 'Factura recibida'}</button>` : ''} <button class="btn sm ghost" data-act="ase-acuerdo" data-k="${esc(r.a.codigo)}" title="Generar el acuerdo de colaboración">Acuerdo</button><button class="btn sm ghost" data-act="ase-edit" data-k="${esc(r.a.codigo)}">Editar</button></td></tr>
     ${ASE.open === r.a.codigo ? `<tr><td colspan="7" style="background:var(--bg)"><div class="cs" style="margin-bottom:6px">Empresas de ${esc(r.a.nombre)}</div>${Object.keys(r.empresas).length ? `<table><tbody>${Object.values(r.empresas).sort((a, b) => b.ventas - a.ventas).map(e => `<tr><td>${esc(e.nombre)}</td><td class="r num">${money(e.ventas)}</td><td class="r num">${money(e.ventas * r.pct / 100)}</td></tr>`).join('')}</tbody></table>` : '<p class="note">Sus empresas no han recargado en este semestre.</p>'}
-      <p class="note" style="margin-top:8px">Vinculadas: ${esc(clientes().filter(c => c.asesoria === r.a.codigo).map(c => c.nombre).join(', ') || 'ninguna')}. Para cambiar la asesoría de una empresa, edítala en Clientes.</p></td></tr>` : ''}`).join('')}
+      ${r.a.firmado && r.a.firmado.condiciones ? `<p class="note" style="margin-top:8px"><b>Acuerdo firmado:</b> ${esc(r.a.firmado.condiciones)}</p>` : ''}<p class="note" style="margin-top:8px">Vinculadas: ${esc(clientes().filter(c => c.asesoria === r.a.codigo).map(c => c.nombre).join(', ') || 'ninguna')}. Para vincular o cambiar la asesoría de una empresa, edítala en Clientes (o crea la empresa con «+ Nuevo cliente»).</p></td></tr>` : ''}`).join('')}
   </tbody><tfoot><tr><td>Total</td><td></td><td class="r num">${money(tot.v)}</td><td></td><td class="r num">${money(tot.c)}</td><td colspan="2"></td></tr></tfoot></table></div>
   <p class="note" style="margin-top:14px">La comisión se calcula sobre la base imponible de lo que facturas a cada empresa (créditos y productos), desde ${esc(mesLabel(cfg().desde))}. Lo anterior lo liquidó Creative Quality.</p>`;
 }
@@ -961,12 +978,352 @@ ACTS['ase-xlsx'] = () => {
 };
 document.addEventListener('change', e => { if (e.target.id === 'ase-per') { ASE.per = e.target.value; ASE.open = ''; render(); } });
 
+/* ===== OneDrive (Microsoft 365) y correo para Thunderbird ===== */
+const M365 = 'Microsoft 365';
+let MCP = null;
+const odCfg = () => S.docs.get('onedrive') || null;
+const odName = s => String(s || '').replace(/[\\/:*?"<>|#%]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '').slice(0, 100) || 'Sin nombre';
+const mcpText = r => { const t = ((r && r.content) || []).filter(c => c && typeof c.text === 'string').map(c => c.text).join('\n'); if (t) return t; const p = r && r.payload; return typeof p === 'string' ? p : p ? JSON.stringify(p) : ''; };
+const urlKey = u => { try { u = decodeURIComponent(u); } catch (e) {} return u.replace(/\/+$/, '').toLowerCase(); };
+function mcpMsg(e){
+  const c = e && e.code;
+  if (c === 'needs_reauth') return 'Vuelve a conectar Microsoft 365 en claude.ai → Ajustes → Conectores.';
+  if (c === 'server_not_connected' || c === 'selection_required') return 'Conecta Microsoft 365 en claude.ai → Ajustes → Conectores.';
+  if (c === 'not_in_manifest' || c === 'approval_required' || c === 'consent_required') return 'Hace falta que permitas a esta página usar Microsoft 365: vuelve a pulsar el botón y acepta el aviso.';
+  if (c === 'blocked_by_policy') return 'Tu organización no permite esta acción de Microsoft 365.';
+  if (c === 'tool_error') return 'OneDrive respondió con un error: ' + String(e.message || '').slice(0, 160);
+  return 'No se pudo conectar con OneDrive. Comprueba si el archivo llegó antes de repetir.';
+}
+async function odReady(){
+  if (!odCfg()) throw { code: 'local', message: 'Falta la configuración de la carpeta de OneDrive. Pídemela en el chat.' };
+  if (!MCP && window.claude && window.claude.use) { try { MCP = await window.claude.use('mcp'); } catch (e) {} }
+  if (!MCP) throw { code: 'local', message: 'Guardar en OneDrive no está disponible en la versión web.' };
+  return MCP;
+}
+async function odFolder(parent, name){
+  const cfg = odCfg(), m = await odReady(); name = odName(name);
+  try {
+    const t = mcpText(await m.callTool(M365, 'sharepoint_create_folder', { driveId: cfg.driveId, parentItemId: parent.id, name }));
+    const id = (t.match(/itemId:\s*(\S+)/) || [])[1];
+    if (id) return { id, url: (t.match(/webUrl:\s*(\S+)/) || [])[1] || parent.url + '/' + encodeURIComponent(name) };
+    throw { code: 'tool_error', message: t };
+  } catch (e) {
+    if (!e || e.code !== 'tool_error') throw e;
+    const want = urlKey(parent.url + '/' + name), t = mcpText(await m.callTool(M365, 'sharepoint_folder_search', { name, limit: 50 }, { cache: false }));
+    const re = /"id":"([^"]+)","name":"[^"]*","webUrl":"([^"]+)"/g; let x;
+    while ((x = re.exec(t))) if (urlKey(x[2]) === want) return { id: x[1], url: x[2] };
+    throw e;
+  }
+}
+const blobB64 = b => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.onerror = rej; fr.readAsDataURL(b); });
+async function odUpload(folder, filename, blob){
+  const cfg = odCfg(), m = await odReady();
+  if (blob.size > 1000000) throw { code: 'local', message: 'El archivo pasa de 1 MB y OneDrive no lo admite por esta vía.' };
+  const t = mcpText(await m.callTool(M365, 'sharepoint_upload_file', { driveId: cfg.driveId, parentItemId: folder.id, filename, contentBase64: await blobB64(blob), conflictBehavior: 'replace' }));
+  return (t.match(/webUrl:\s*(\S+)/) || [])[1] || folder.url;
+}
+// carpeta de una asesoría (y subcarpeta opcional); guarda los ids en el objeto `a` (quien llama lo graba)
+async function odAseFolder(a, sub){
+  if (!a.od) a.od = await odFolder(odCfg().acu || odCfg().ase, a.nombre);
+  if (!sub) return a.od;
+  a.odSub = a.odSub || {};
+  if (!a.odSub[sub]) a.odSub[sub] = await odFolder(a.od, sub);
+  return a.odSub[sub];
+}
+async function odCliFolder(c, nombre){
+  if (c && c.od) return c.od;
+  const f = await odFolder(odCfg().cli, nombre);
+  if (c) c.od = f;
+  return f;
+}
+const odErr = e => toast(e && e.code === 'local' ? e.message : mcpMsg(e), true);
+
+function emlBlob({ to, cc, subject, text, files }){
+  const b64 = s => btoa(unescape(encodeURIComponent(s))), wrap = s => s.replace(/.{1,76}/g, '$&\r\n');
+  const hdr = s => /^[\x20-\x7e]*$/.test(s) ? s : '=?UTF-8?B?' + b64(s) + '?=';
+  const c = cfg(), bd = '=_tl' + Math.random().toString(36).slice(2);
+  let m = `MIME-Version: 1.0\r\nX-Unsent: 1\r\nDate: ${new Date().toUTCString()}\r\nFrom: ${hdr(ID().nombre)} <${ID().email || 'correo@ejemplo.es'}>\r\nTo: ${to}\r\n${cc ? 'Cc: ' + cc + '\r\n' : ''}Subject: ${hdr(subject)}\r\nContent-Type: multipart/mixed; boundary="${bd}"\r\n\r\n--${bd}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(b64(text))}`;
+  for (const f of files) m += `--${bd}\r\nContent-Type: ${f.type}; name="${f.name}"\r\nContent-Disposition: attachment; filename="${f.name}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(f.b64)}`;
+  return new Blob([m + `--${bd}--\r\n`], { type: 'message/rfc822' });
+}
+const firma = () => `Un saludo,\n${ID().nombre}\n${ID().marca}${ID().email ? '\n' + ID().email : ''}`;
+const nombrePila = s => { const t = String(s || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0]; return t && !/^(d\.|dña\.|d\/dña\.)$/i.test(t) ? t : ''; };
+// ventana de correo: genera un .eml con el adjunto para abrir en Thunderbird
+function correoModal({ titulo, to, subject, text, file, marcar, onDone }){
+  modal(titulo, `<p>Se descarga un .zip con el correo dentro (con el PDF adjunto). Abre el zip, haz doble clic en el archivo .eml para abrirlo en Thunderbird y elige <b>Mensaje → Editar como mensaje nuevo</b>; revísalo y envíalo.</p>
+  <div class="fgrid">
+    <label class="field full"><span>Para</span><input name="to" value="${esc(to || '')}" placeholder="correo@empresa.com"></label>
+    <label class="field full"><span>CC (opcional)</span><input name="cc"></label>
+    <label class="field full"><span>Asunto</span><input name="subject" value="${esc(subject)}"></label>
+    <label class="field full"><span>Texto</span><textarea name="text" rows="11">${esc(text)}</textarea></label>
+    <p class="note full" style="margin:0">Adjunto: ${esc(file.name)}</p>
+    ${marcar ? `<label class="full" style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="marcar" checked style="width:auto"> ${esc(marcar)}</label>` : ''}
+  </div>`, [{ label: 'Descargar correo', cls: 'primary', on: v => {
+    const list = s => s.split(/[;,\s]+/).filter(Boolean), bad = [...list(v.to), ...list(v.cc)].filter(x => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    if (bad.length) { toast('Revisa estas direcciones: ' + bad.join(', '), true); return false; }
+    const btn = document.querySelector('.modal-card [data-m="0"]'); if (btn) { btn.disabled = true; btn.textContent = 'Preparando…'; }
+    (async () => {
+      let ok = false;
+      try { const blob = await file.make(); const base = file.name.replace(/\.pdf$/i, ''); const eml = emlBlob({ to: list(v.to).join(', '), cc: list(v.cc).join(', '), subject: v.subject.trim(), text: v.text, files: [{ name: file.name, type: 'application/pdf', b64: await blobB64(blob) }] }); const zip = zipStore([{ name: 'Correo - ' + base + '.eml', data: new Uint8Array(await eml.arrayBuffer()) }]); ok = await saveFile('Correo ' + base + '.zip', zip); if (ok && onDone) onDone(v); }
+      catch (e) { console.error('eml', e); toast('No se pudo preparar el correo (' + (e && e.message || e) + ').', true); }
+      if (ok) $('#modal-root').innerHTML = ''; else if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = 'Descargar correo'; }
+    })();
+    return false;
+  } }]);
+}
+
+/* --- presupuestos --- */
+const preFile = p => { const a = p.asesoria ? asesorias().find(x => x.codigo === p.asesoria) : null; return `Presupuesto ${p.num || 'borrador'} ${a ? sx(a.nombre, 30).replace(/[. ]+$/, '') + ' - ' : ''}${sx(preCliente(p).nombre || '', 40)}`.trim().replace(/[. -]+$/, ''); };
+const prePdfBlob = p => { if (!window.pdfMake || !window.pdfMake.createPdf) return Promise.reject(new Error('no se pudo cargar el generador de PDF; recarga la página')); return new Promise((res, rej) => { try { window.pdfMake.createPdf(preDocDef(p)).getBlob(res); } catch (e) { rej(e); } }); };
+async function preOneDrive(p, btn){
+  const t = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    await odReady();
+    const cfgOd = odCfg(), folder = cfgOd.pre, donde = '01 Empresa/07 Comercial/Propuestas';
+    if (!folder) throw { code: 'local', message: 'Falta la carpeta de propuestas en la configuración de OneDrive.' };
+    const url = await odUpload(folder, preFile(p) + '.pdf', await prePdfBlob(p));
+    const d = clone(S.docs.get(p.id) || p), id = p.id; delete d.id; d.onedrive = { url, fecha: today(), carpeta: donde };
+    await safe(() => Store.put(id, d));
+    toast('Guardado en OneDrive: ' + donde);
+  } catch (e) { console.error('onedrive', e); odErr(e); }
+  finally { btn.disabled = false; btn.textContent = t; }
+}
+function preCorreo(p){
+  const cl = preCliente(p), a = p.asesoria ? asesorias().find(x => x.codigo === p.asesoria) : null, t = preTotales(p);
+  const ls = (p.lineas || []).filter(l => num(l.cant) * num(l.precio)), men = r2(ls.filter(esCred).reduce((a, l) => a + num(l.cant) * num(l.precio), 0)), uni = r2(ls.filter(l => !esCred(l)).reduce((a, l) => a + num(l.cant) * num(l.precio), 0));
+  const importe = men && uni ? `Cuota mensual: ${money(men)} + IVA.\nPago único (${ls.filter(l => !esCred(l)).map(l => (l.concepto || '').toLowerCase()).join(', ')}): ${money(uni)} + IVA.` : men ? `Cuota mensual: ${money(men)} + IVA (${money(r2(men * (1 + num(p.iva ?? 21) / 100)))} con IVA).` : `Importe: ${money(t.base)} + IVA (${money(t.total)} con IVA).`;
+  const np = nombrePila(cl.contacto);
+  const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el presupuesto ${p.num || ''}${p.titulo ? ' · ' + p.titulo : ''}.\n\n${importe}\nValidez: ${num(p.validez) || 30} días.\n\nPara aceptarlo, fírmalo y devuélvemelo respondiendo a este correo. Cualquier duda, quedo a tu disposición.\n\n${firma()}`;
+  correoModal({ titulo: 'Enviar presupuesto ' + (p.num || ''), to: cl.email || (a && a.email) || '', subject: `Presupuesto ${p.num || ''} · Time Laboris${a ? ' · ' + a.nombre : cl.nombre ? ' · ' + cl.nombre : ''}`, text, file: { name: preFile(p) + '.pdf', make: () => prePdfBlob(p) }, marcar: p.estado === 'borrador' ? 'Marcar el presupuesto como «Enviado»' : '', onDone: v => { if (v.marcar && p.id) { const d = clone(S.docs.get(p.id) || p); delete d.id; d.estado = 'enviado'; safe(() => Store.put(p.id, d)); } } });
+}
+
+/* --- acuerdos --- */
+const acuFile = d => `Acuerdo colaboracion Timelaboris ${sx(d.nombre, 40).replace(/[. ]+$/, '')}`;
+async function acuOneDrive(doc, id, d){
+  try {
+    await odReady();
+    const a = { ...doc, id };
+    const folder = await odAseFolder(a);
+    const pdfUrl = await odUpload(folder, acuFile(d) + '.pdf', await acuPdfBlob(d));
+    await odUpload(folder, acuFile(d) + '.docx', await acuDocx(d));
+    const out = { ...a }; delete out.id; out.acuerdo = { ...out.acuerdo, onedrive: { url: pdfUrl, fecha: today() } };
+    await safe(() => Store.put(id, out));
+    toast('Acuerdo guardado en OneDrive: 05 Contratos y acuerdos/Time Laboris/Asesorías/' + odName(d.nombre) + ' (PDF y Word)');
+  } catch (e) { console.error('onedrive', e); odErr(e); }
+}
+function acuCorreo(doc, d){
+  const np = nombrePila(d.rep);
+  const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el acuerdo de colaboración para la implantación de Timelaboris entre vuestras empresas clientes: ${String(d.pct).replace('.', ',')} % de comisión sobre su facturación, liquidada cada semestre (en julio y en enero).\n\nSi estáis de acuerdo, fírmalo (a mano o con certificado digital) y devuélvemelo respondiendo a este correo.\n\n${firma()}`;
+  correoModal({ titulo: 'Enviar acuerdo · ' + d.nombre, to: doc.email || '', subject: 'Acuerdo de colaboración Timelaboris · ' + d.nombre, text, file: { name: acuFile(d) + '.pdf', make: () => acuPdfBlob(d) } });
+}
+/* ===== logo de la asesoría (pegar con Ctrl+V) ===== */
+function logoField(a){
+  const v = (a && a.logo) || '';
+  return `<div class="field full"><span>Logo de la asesoría (opcional)</span><div id="logo-zone" class="logo-zone" tabindex="0" aria-label="Pega aquí el logo">${v ? `<img src="${esc(v)}" alt="Logo">` : LOGO_HINT}</div>
+    <input type="hidden" name="logo" id="logo-val" value="${esc(v)}"><input type="hidden" name="logoW" id="logo-w" value="${esc((a && a.logoW) || '')}"><input type="hidden" name="logoH" id="logo-h" value="${esc((a && a.logoH) || '')}">
+    <div class="row" style="gap:6px"><label class="btn sm" for="logo-file">Elegir archivo…</label><input type="file" id="logo-file" accept="image/*" hidden><button type="button" class="btn sm ghost" id="logo-del">Quitar</button>${a && a.web ? `<a class="btn sm ghost" href="${esc(/^https?:/i.test(a.web) ? a.web : 'https://' + a.web)}" target="_blank" rel="noopener">Abrir su web ↗</a>` : ''}</div></div>`;
+}
+const LOGO_HINT = '<span>En su web, clic derecho sobre el logo → «Copiar imagen». Luego pulsa aquí y Ctrl+V.</span>';
+async function logoSet(file){
+  if (!file || !/^image\//.test(file.type)) { toast('Eso no es una imagen. En su web usa clic derecho → «Copiar imagen».', true); return; }
+  const url = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+  const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('img')); i.src = url; });
+  let w = im.naturalWidth || 300, h = im.naturalHeight || 150; const k = Math.min(1, 400 / w, 160 / h); w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(im, 0, 0, w, h);
+  const out = cv.toDataURL('image/png'), z = $('#logo-zone'); if (!z) return;
+  $('#logo-val').value = out; $('#logo-w').value = w; $('#logo-h').value = h; z.innerHTML = `<img src="${out}" alt="Logo">`;
+}
+document.addEventListener('paste', e => {
+  if (!document.getElementById('logo-zone')) return;
+  const it = [...((e.clipboardData && e.clipboardData.items) || [])].find(x => x.kind === 'file' && x.type.startsWith('image/'));
+  if (it) { e.preventDefault(); logoSet(it.getAsFile()).catch(() => toast('No se pudo leer la imagen.', true)); return; }
+  if (e.target.closest && e.target.closest('#logo-zone')) toast('No hay ninguna imagen copiada. En su web usa clic derecho → «Copiar imagen».', true);
+});
+document.addEventListener('change', e => { if (e.target.id === 'logo-file' && e.target.files[0]) { const f = e.target.files[0]; e.target.value = ''; logoSet(f).catch(() => toast('No se pudo leer la imagen.', true)); } });
+document.addEventListener('click', e => { if (e.target.id === 'logo-del') { $('#logo-val').value = ''; $('#logo-w').value = ''; $('#logo-h').value = ''; $('#logo-zone').innerHTML = LOGO_HINT; } });
+const logoDims = (d, maxH, maxW) => { const r = (num(d.logoW) || 2) / (num(d.logoH) || 1); let h = maxH, w = h * r; if (w > maxW) { w = maxW; h = w / r; } return [w, h]; };
+/* ===== acuerdo de colaboración con asesorías ===== */
+const ACU_IMG = { tl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJMAAACTCAMAAAC9O9snAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAFcUExURQAAAOM5HPFOMfFKMepKK/BMLupAK9UrAPFMMPBNL/ZCL/FOMPBNL/FNLhyNrwAA/wCJsR6HpR+OsB6NsRxxqh2NrwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHIRIH4AAAB0dFJOUwAJ/7IYQwwG29obz9BwUwENEf9lCfkFGaX/UsfvFPn37QgOQEcEb+U+U9fbbZH1kKHgnfD2AUgs0gtwJ/RP+PFVFgYm/irmJTsitB1MGxL8+5s18gKwxnGYwfOF4wy+xeFhvcvZdANbpDSC4rMeEXbrq8yxgEVLCAAAAAlwSFlzAAAh1QAAIdUBBJy0nQAAAy5JREFUeF7tlYdTU0EQh8/Yu6ICPwURsBIbTURsYOwFldgQe+/t/59x7t7dvbvNu8wGhkhkvxl4t7eb3e8l9xKlBEEQBKG5rChx8OU0UcjKaELjrKINC/HlNFFMNKFxxImHOPEQJx7ixEOceIgTjxZwWk3zPOIm4pQibrKsnUql0hq654mbiFOKuIk4pYibiFOKuIk4pYibiFOKuIk4pYibiFOKuIk4pYib/I9Oa9dp1js20LynrtNGxybNZppeLOo6/SOWqFMttKjJUB0DLWoyVMdAi5oM1THQIqGpbInYStM84ibbaLpBtrdF7KB5HnGTNppuEHHiIU48xImHOPEQJx7ixEOceIgTD3HiIU48WsApgS+niWKiCY0jTjzEiYc48RAnHuLEQ5x4LEWnnbRfIb6cJgrZFU0QBEEQBEFofdrpxuLSQTccnXCo3QDNpsEeuuPp4rXRI4sJnLqTRQUs3GkveuhWwD5ek4iFO9VnKTv19tp/fUC/2dkPdPuyA13AQRcQp0PAYf1i/ZgYpyPAQFhQBo7apZ6gj4meptQxHA/rHM7JnCdAnz5zANvdwmbDMHKymRMKJzOnwaiWvBYYMksTme3hoJeFOGEkC0ZxSik15juZy2kXBk7AuL6cwaB1sjXj/gYwoS9ns9i7ua7nzvtWHuJ0wQQXgUmzGLGNbPFU9pkETuHbYZ3ilI8voWLCy1lS/11xpQT62QWRUqpfX6/imqu2c7zTdfS55Q3rdNNt3NK1t3HHxdPhhGgaJeF01y2UUhXcc3QSp0rQ1p2nfGM4nqtvLXRSwP08G5BwmnGLqt4N0G9Z7hSNrHHSZzmMHxCn1Nd5wumhWxgnV+w25+n0iDrpp9t9SwQknB67RVWpJ2mn2bpOT5Way+MxjNY4Fdwwz0nlP05ZQUPPnTuZ8QRf9WyeTs8xlEWV7CkKnF7gZbaY9U72BqbxSl9e400WVzBFnMp68XaeTqoHeKfel4EPtjZDrweAj1oN/rMDyp8mysDnrMMX4Gt1cg745sdkTt+BH9UZ/LSTAlhOqiOXIE42+hWcp99hrS93a3t1iT95nSAIgiAIgiAsC/4CpvvuD7iSFREAAAAASUVORK5CYII=', cq: 'data:image/png;base64,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' };
+const ACU_CQ = { rep: '____________________', dni: '____________', entidad: 'CREATIVE QUALITY S.L.', cif: 'B18799353', dom: 'Centro Comercial Neptuno, C/ Arabial s/n, 18004 Granada', firma: 'CREATIVE QUALITY S.L.' };
+function acuDist(){ const i = ID(); return { rep: i.nombre, dni: i.nif || '____________', entidad: i.marca, dom: i.dir || '____________________', firma: i.nombre }; }
+const ACU_PCTS = [10, 15, 20];
+const pctSelect = (name, val) => { const v = num(val) || 20, ops = ACU_PCTS.includes(v) ? ACU_PCTS : [...ACU_PCTS, v].sort((a, b) => a - b); return `<select name="${name}">${ops.map(x => `<option value="${x}" ${x === v ? 'selected' : ''}>${String(x).replace('.', ',')} %</option>`).join('')}</select>`; };
+const fechaLarga = s => { const [y, m, d] = (s || today()).split('-'); return `${+d} de ${MESES[+m - 1]} de ${y}`; };
+function acuBloques(d){
+  const P = ACU_CQ, D = acuDist(), B = text => ({ text, b: true }), h = s => s || '____________________';
+  const eur = n => (Number.isInteger(n) ? intf(n) : money(n).replace(' €', '')) + ' €';
+  const bl = [
+    { k: 'title', text: 'ACUERDO DE COLABORACIÓN COMERCIAL' },
+    { k: 'h', text: 'De una parte' },
+    { k: 'p', runs: [`${P.rep}, con DNI ${P.dni}, en representación de la entidad ${P.entidad}, con CIF ${P.cif}, domiciliada en ${P.dom}, en adelante el `, B('PROVEEDOR'), '.'] },
+    { k: 'h', text: 'De otra parte' },
+    { k: 'p', runs: [`${D.rep}, con NIF ${D.dni}, en su propio nombre y con el nombre comercial ${D.entidad}, con domicilio en ${D.dom}, distribuidor de Timelaboris, en adelante el `, B('DISTRIBUIDOR'), '.'] },
+    { k: 'h', text: 'Y de otra parte' },
+    { k: 'p', runs: [`D./Dña. ${h(d.rep)}, con DNI ${h(d.dni)}, en representación de la entidad ${h(d.nombre)}, con CIF/NIF ${h(d.cif)} y domicilio en ${h(d.domicilio)}, en adelante el `, B('ASESOR'), '.'] },
+    { k: 'h', text: 'EXPONEN' },
+    { k: 'p', runs: ['Que dentro de las actividades del PROVEEDOR se encuentra la plataforma ', B('TIMELABORIS'), ', que el DISTRIBUIDOR comercializa e implanta.'] },
+    { k: 'h2', text: 'Portal del empleado con registro de la jornada laboral' },
+    { k: 'p', runs: ['Aplicación eficaz, intuitiva y sencilla que le permite gestionar todas las tareas relacionadas con el registro y el control horario de los trabajadores.'] },
+    { k: 'p', runs: ['Asimismo, permite a su asesoría el envío de nóminas, contratos o cualquier documento que deseen compartir con los trabajadores de dichas empresas.'] },
+    { k: 'p', runs: ['Dada la repercusión y las necesidades que tienen las empresas de implantar un sistema de control de registro horario, el objeto del presente acuerdo es regular la colaboración de las Partes con el objetivo de conseguir la implantación de Timelaboris entre las empresas clientes del ASESOR.'] },
+    { k: 'li', runs: [B('CONTRAPRESTACIÓN. '), 'El ', B('ASESOR'), ` obtendrá Timelaboris para su entidad de forma gratuita si la contratan un mínimo de ${d.minEmp} de sus empresas, y `, B(`una comisión del ${String(d.pct).replace('.', ',')} %`), ` sobre la facturación que realicen sus empresas siempre que esta sea igual o superior a ${eur(d.minimo)} en el semestre. En caso de no llegar a dicha cantidad en el semestre, la liquidación será anual, al final del ejercicio en curso, siempre que la facturación anual supere los ${eur(d.minimo)}.`] },
+    { k: 'li', runs: [B('LIQUIDACIÓN. '), 'El ', B('DISTRIBUIDOR'), ' liquidará la comisión por semestres naturales: en julio, la del primer semestre (enero a junio), y en enero, la del segundo semestre (julio a diciembre) o, en su caso, la anual. Para ello, el ', B('ASESOR'), ' emitirá su factura al ', B('DISTRIBUIDOR'), ' por el importe de la comisión más el IVA correspondiente.'] },
+    { k: 'li', runs: [B('ACCIONES COMERCIALES. '), 'El ', B('ASESOR'), ' se compromete a promover entre sus clientes, en la medida de sus posibilidades, la contratación de los servicios que ofrece el ', B('PROVEEDOR'), ' a través del ', B('DISTRIBUIDOR'), '.'] },
+    { k: 'li', runs: [B('ADMISIÓN DE INFORMACIÓN. '), 'Para poder llevar a cabo la promoción establecida en este convenio, el ', B('ASESOR'), ' remitirá información de las empresas al ', B('DISTRIBUIDOR'), ', encargándose este de la puesta en funcionamiento y formación del sistema.'] }
+  ];
+  if (d.notas) bl.push({ k: 'li', runs: [B('OTRAS CONDICIONES. '), d.notas] });
+  bl.push({ k: 'p', runs: [`En ${h(d.lugar)}, a ${fechaLarga(d.fecha)}.`], top: true }, { k: 'sign', names: [['El PROVEEDOR', P.firma, d.firmas && d.firmas.cq], ['El DISTRIBUIDOR', D.firma, d.firmas && d.firmas.dist], ['El ASESOR', d.nombre || '', null]] });
+  return bl;
+}
+function acuDocDef(d){
+  const runs = r => r.map(x => typeof x === 'string' ? x : { text: x.text, bold: true }), content = [];
+  content.push({ columns: [{ image: ACU_IMG.tl, width: 44 }, { image: ACU_IMG.cq, width: 69 }, ...(d.logo ? [{ image: d.logo, width: logoDims(d, 42, 110)[0] }] : []), { width: '*', text: '' }, (() => { const l = logoPDF(); if (l.svg) l.width = 140; if (l.fit) l.fit = [140, 44]; if (l.text) l.width = 140; return l; })()], columnGap: 10, margin: [0, 0, 0, 8] });
+  for (const b of acuBloques(d)) {
+    if (b.k === 'title') content.push({ text: b.text, bold: true, fontSize: 15, alignment: 'center', color: '#1E3760', characterSpacing: .6, margin: [0, 0, 0, 8] });
+    else if (b.k === 'h') content.push({ text: b.text, bold: true, fontSize: 11, margin: [0, 6, 0, 2] });
+    else if (b.k === 'h2') content.push({ text: b.text, bold: true, italics: true, margin: [0, 3, 0, 3] });
+    else if (b.k === 'p') content.push({ text: runs(b.runs), alignment: 'justify', margin: [0, b.top ? 6 : 0, 0, 4] });
+    else if (b.k === 'li') content.push({ text: runs(b.runs), alignment: 'justify', margin: [14, 1, 0, 4] });
+    else if (b.k === 'sign') { const H = b.names.some(x => x[2]) ? 60 : 26, fit = im => { const r = im.w / im.h; let h = H, w = h * r; if (w > 140) { w = 140; h = w / r; } return { width: w, height: h }; }; content.push({ columns: b.names.map(([rol, n, im]) => ({ stack: [{ text: rol, fontSize: 8.5, color: '#56657A' }, im ? { image: im.src, ...fit(im), margin: [0, 2 + H - fit(im).height, 0, 0] } : { text: ' ', fontSize: 1, margin: [0, 0, 0, H + 1] }, { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: .7, lineColor: '#9AA6B2' }] }, { text: [{ text: 'Fdo. ', bold: true }, n], fontSize: 9, margin: [0, 3, 0, 0] }] })), columnGap: 18, margin: [0, 4, 0, 0], unbreakable: true }); }
+  }
+  return { pageSize: 'A4', pageMargins: [54, 28, 54, 22], content, defaultStyle: { font: 'Roboto', fontSize: 9.5, color: '#1B2A40', lineHeight: 1.12 }, info: { title: 'Acuerdo de colaboración comercial · ' + d.nombre, author: acuDist().firma } };
+}
+function acuPdfBlob(d){
+  if (!window.pdfMake || !window.pdfMake.createPdf) return Promise.reject(new Error('no se pudo cargar el generador de PDF; recarga la página'));
+  return new Promise((res, rej) => { try { window.pdfMake.createPdf(acuDocDef(d)).getBlob(res); } catch (e) { rej(e); } });
+}
+const b64bytes = s => Uint8Array.from(atob(s.slice(s.indexOf(',') + 1)), c => c.charCodeAt(0));
+function svgPng(svg, w, h){
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => { try { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(im, 0, 0, w, h); res(cv.toDataURL('image/png')); } catch (e) { rej(e); } }; im.onerror = () => rej(new Error('logo')); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+}
+function zipStore(files){
+  const T = zipStore.t || (zipStore.t = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })());
+  const crc = d => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = T[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), d = typeof f.data === 'string' ? enc.encode(f.data) : f.data, c = crc(d);
+    const lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, c, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true); lh.setUint16(26, nm.length, true);
+    const ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, c, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off, true);
+    parts.push(new Uint8Array(lh.buffer), nm, d); cen.push(new Uint8Array(ch.buffer), nm); off += 30 + nm.length + d.length;
+  }
+  const cs = cen.reduce((s, x) => s + x.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cs, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...cen, new Uint8Array(e.buffer)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+async function acuDocx(d){
+  const EMU = 914400, imgs = [];
+  const addImg = (data, wIn, hIn) => { const n = imgs.length + 1; imgs.push({ id: 'rIdImg' + n, file: 'image' + n + '.png', data: b64bytes(data) }); return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${Math.round(wIn * EMU)}" cy="${Math.round(hIn * EMU)}"/><wp:docPr id="${n}" name="Logo ${n}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${n}" name="image${n}.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg${n}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${Math.round(wIn * EMU)}" cy="${Math.round(hIn * EMU)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`; };
+  const xr = (t, o = {}) => `<w:r><w:rPr>${o.b ? '<w:b/>' : ''}${o.i ? '<w:i/>' : ''}${o.color ? `<w:color w:val="${o.color}"/>` : ''}${o.sz ? `<w:sz w:val="${o.sz}"/>` : ''}</w:rPr><w:t xml:space="preserve">${xe(t)}</w:t></w:r>`;
+  const xp = (inner, o = {}) => `<w:p><w:pPr>${o.keep ? '<w:keepNext/>' : ''}<w:spacing w:before="${o.before || 0}" w:after="${o.after ?? 120}" w:line="240" w:lineRule="auto"/>${o.ind ? `<w:ind w:left="${o.ind}"/>` : ''}<w:jc w:val="${o.jc || 'both'}"/></w:pPr>${inner}</w:p>`;
+  const xtbl = cells => `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${cells.map(() => `<w:gridCol w:w="${Math.floor(9638 / cells.length)}"/>`).join('')}</w:tblGrid><w:tr><w:cantSplit/>${cells.map(c => `<w:tc><w:tcPr><w:tcW w:w="${Math.floor(9638 / cells.length)}" w:type="dxa"/></w:tcPr>${c}</w:tc>`).join('')}</w:tr></w:tbl>`;
+  const runs = r => r.map(x => typeof x === 'string' ? xr(x) : xr(x.text, { b: true })).join('');
+  let body = xtbl([xp(addImg(ACU_IMG.tl, .55, .55) + xr('  ') + addImg(ACU_IMG.cq, .86, .55) + (d.logo ? xr('  ') + addImg(d.logo, ...logoDims(d, .55, 1.2)) : ''), { jc: 'left', after: 0 }), xp(xr(ID().marca, { b: true, sz: 28, color: '2F5288' }), { jc: 'right', after: 0 })]);
+  for (const b of acuBloques(d)) {
+    if (b.k === 'title') body += xp(xr(b.text, { b: true, sz: 30, color: '1E3760' }), { jc: 'center', before: 120, after: 140 });
+    else if (b.k === 'h') body += xp(xr(b.text, { b: true, sz: 22 }), { before: 100, after: 40, keep: true, jc: 'left' });
+    else if (b.k === 'h2') body += xp(xr(b.text, { b: true, i: true }), { before: 80, after: 80, keep: true, jc: 'left' });
+    else if (b.k === 'p') body += xp(runs(b.runs), { before: b.top ? 160 : 0, keep: b.top });
+    else if (b.k === 'li') body += xp(runs(b.runs), { ind: 284, before: 10, after: 80 });
+    else if (b.k === 'sign') { const H = .85, any = b.names.some(x => x[2]), fit = im => { const r = im.w / im.h; let h = H, w = h * r; if (w > 1.9) { w = 1.9; h = w / r; } return [w, h]; }; body += xtbl(b.names.map(([rol, n, im]) => xp(xr(rol, { sz: 17, color: '56657A' }), { jc: 'left', after: 0 }) + (im ? xp(addImg(im.src, ...fit(im)), { jc: 'left', before: Math.round((H - fit(im)[1]) * 1440) + 40, after: 0 }) : '') + xp(xr('Fdo. ', { b: true, sz: 18 }) + xr(n, { sz: 18 }), { jc: 'left', before: im ? 40 : any ? Math.round(H * 1440) + 80 : 760 }))); }
+  }
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
+  const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const doc = `${head}<w:document ${W}><w:body>${body}<w:p/><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="1134" w:bottom="680" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const styles = `${head}<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:color w:val="1B2A40"/><w:sz w:val="19"/><w:szCs w:val="19"/><w:lang w:val="es-ES"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  return zipStore([
+    { name: '[Content_Types].xml', data: `${head}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
+    { name: '_rels/.rels', data: `${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name: 'word/document.xml', data: doc },
+    { name: 'word/styles.xml', data: styles },
+    { name: 'word/_rels/document.xml.rels', data: `${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdSt" Type="${R}/styles" Target="styles.xml"/>${imgs.map(i => `<Relationship Id="${i.id}" Type="${R}/image" Target="media/${i.file}"/>`).join('')}</Relationships>` },
+    ...imgs.map(i => ({ name: 'word/media/' + i.file, data: i.data }))
+  ]);
+}
+function acuForm(a){
+  const ac = (a && a.acuerdo) || {}, dom = a ? (a.domicilio || [a.direccion, [a.cp, a.poblacion].filter(Boolean).join(' ')].filter(Boolean).join(', ')) : '';
+  const f = (name, label, val, cls = '', extra = '') => `<label class="field ${cls}"><span>${label}</span><input name="${name}" value="${esc(val ?? '')}" ${extra}></label>`;
+  return `<p>Acuerdo a tres partes: Creative Quality (proveedor), ${esc(ID().marca)} (distribuidor, liquida la comisión cada semestre, en julio y enero) y la asesoría (asesor). Los datos se guardan en su ficha.</p>
+  <div class="fgrid">
+    ${f('nombre', 'Razón social de la asesoría', a && a.nombre, 'full')}
+    ${f('cif', 'CIF / NIF', a && a.cif)}
+    ${a ? '' : f('codigo', 'Código CQ (opcional)', '')}
+    ${f('domicilio', 'Domicilio', dom, 'full')}
+    ${f('rep', 'Representante (nombre y apellidos)', a && a.representante)}
+    ${f('dni', 'DNI del representante', a && a.dniRep)}
+    <label class="field"><span>Comisión</span>${pctSelect('pct', ac.pct ?? (a && a.pct) ?? 20)}</label>
+    ${f('minimo', 'Facturación mínima al semestre (€)', ac.minimo ?? 500, '', 'inputmode="decimal"')}
+    ${f('minEmp', 'Empresas para tenerlo gratis', ac.minEmp ?? 2, '', 'inputmode="numeric"')}
+    ${f('lugar', 'Lugar de firma', ac.lugar || 'Sevilla')}
+    ${f('fecha', 'Fecha', today(), '', 'type="date"')}
+    ${logoField(a)}
+    <label class="field full"><span>Otras condiciones (opcional)</span><textarea name="notas" rows="2">${esc(ac.notas || '')}</textarea></label>
+  </div>
+  ${S.docs.get('firmas') ? '<label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-top:12px"><input type="checkbox" name="firmas" checked style="width:auto"> Incluir el sello y la firma de Creative Quality y los tuyos</label>' : ''}
+  <p class="note" style="margin-top:8px">El hueco del asesor queda libre para que firme a mano o con certificado digital.</p>`;
+}
+async function acuGenerar(a, v, fmt){
+  const d = { nombre: v.nombre.trim(), cif: normCif(v.cif), domicilio: v.domicilio.trim(), rep: v.rep.trim(), dni: normCif(v.dni), pct: num(v.pct), minimo: num(v.minimo), minEmp: Math.max(1, Math.round(num(v.minEmp))), lugar: v.lugar.trim(), fecha: v.fecha || today(), notas: v.notas.trim(), firmas: v.firmas ? S.docs.get('firmas') || null : null, logo: v.logo || '', logoW: num(v.logoW), logoH: num(v.logoH) };
+  const ex = a || asesorias().find(x => d.cif && normCif(x.cif) === d.cif);
+  const id = ex ? ex.id : 'ase_' + (d.cif || uid('n'));
+  const doc = { ...(ex ? clone(ex) : { kind: 'asesoria', codigo: (v.codigo || '').trim() || d.cif || id.slice(4) }), nombre: d.nombre, cif: d.cif, domicilio: d.domicilio, representante: d.rep, dniRep: d.dni, pct: d.pct, logo: d.logo, logoW: d.logoW, logoH: d.logoH, acuerdo: { fecha: d.fecha, pct: d.pct, minimo: d.minimo, periodo: 'semestre', minEmp: d.minEmp, lugar: d.lugar, notas: d.notas, ...(ex && ex.acuerdo && ex.acuerdo.onedrive ? { onedrive: ex.acuerdo.onedrive } : {}) } };
+  delete doc.id;
+  if (fmt === 'od') { toast('Guardando el acuerdo en OneDrive…'); return acuOneDrive(doc, id, d); }
+  safe(() => Store.put(id, doc));
+  if (fmt === 'mail') { setTimeout(() => acuCorreo(doc, d), 0); return; }
+  toast('Generando el acuerdo…');
+  try { await saveFile(`Acuerdo colaboracion Timelaboris ${sx(d.nombre, 40)}.${fmt}`, fmt === 'pdf' ? await acuPdfBlob(d) : await acuDocx(d)); }
+  catch (e) { console.error('acuerdo', e); toast('No se pudo generar el acuerdo (' + (e && e.message || e) + ').', true); }
+}
+function acuModal(a){
+  const gen = fmt => v => { if (!v.nombre.trim()) { toast('Falta la razón social de la asesoría.', true); return false; } acuGenerar(a, v, fmt); };
+  modal(a ? 'Acuerdo de colaboración · ' + a.nombre : 'Nuevo acuerdo de colaboración', acuForm(a), [{ label: 'Descargar Word', on: gen('docx') }, { label: 'Descargar PDF', on: gen('pdf') }, { label: 'Correo (Thunderbird)', on: gen('mail') }]);
+}
+ACTS['ase-acuerdo'] = el => acuModal(el.dataset.k ? asesorias().find(x => x.codigo === el.dataset.k) : null);
+/* ===== alta y edición de asesorías ===== */
+function aseModal(a){
+  const f = (name, label, val, cls = '', extra = '') => `<label class="field ${cls}"><span>${label}</span><input name="${name}" value="${esc(val ?? '')}" ${extra}></label>`;
+  const vinc = a ? clientes().filter(c => c.asesoria === a.codigo) : [];
+  const body = `<p>${a ? `${vinc.length} empresa${vinc.length === 1 ? '' : 's'} vinculada${vinc.length === 1 ? '' : 's'}. Para vincular una empresa, elige esta asesoría en su ficha de Clientes.` : 'Después, vincula sus empresas desde la ficha de cada cliente («Asesoría que la trae»).'}${a ? '<br>' + firmadoHTML(a) : ''}</p>
+  <div class="fgrid">
+    ${f('nombre', 'Razón social', a && a.nombre, 'full')}
+    ${f('cif', 'CIF / NIF', a && a.cif)}
+    ${a ? `<label class="field"><span>Código CQ</span><input value="${esc(a.codigo)}" disabled></label>` : f('codigo', 'Código CQ (opcional)', '', '', 'placeholder="Si no lo tiene, se usa el CIF"')}
+    ${f('domicilio', 'Domicilio', a && a.domicilio, 'full')}
+    ${f('representante', 'Representante', a && a.representante)}
+    ${f('dniRep', 'DNI del representante', a && a.dniRep)}
+    ${f('email', 'Correo', a && a.email)}
+    ${f('telefono', 'Teléfono', a && a.telefono)}
+    <label class="field"><span>Comisión</span>${pctSelect('pct', a ? a.pct : 20)}</label>
+    ${f('web', 'Web', a && a.web, 'full', 'placeholder="https://"')}
+    ${logoField(a)}
+  </div>`;
+  const save = async v => {
+    if (!v.nombre.trim()) { toast('Falta la razón social.', true); return false; }
+    const cif = normCif(v.cif);
+    let codigo = a ? a.codigo : ((v.codigo || '').trim() || cif);
+    if (!a) {
+      if (cif && asesorias().some(x => normCif(x.cif) === cif)) { toast('Ya hay una asesoría con ese CIF.', true); return false; }
+      if (!codigo) codigo = uid('A').toUpperCase();
+      if (asesorias().some(x => x.codigo === codigo)) { toast('Ese código ya lo usa otra asesoría.', true); return false; }
+    }
+    const id = a ? a.id : 'ase_' + codigo.replace(/[^A-Za-z0-9_\-.]/g, '');
+    const doc = { ...(a ? clone(a) : { kind: 'asesoria' }), codigo, nombre: v.nombre.trim(), cif, domicilio: v.domicilio.trim(), representante: v.representante.trim(), dniRep: normCif(v.dniRep), email: v.email.trim(), telefono: v.telefono.trim(), web: v.web.trim(), logo: v.logo || '', logoW: num(v.logoW), logoH: num(v.logoH), pct: num(v.pct) || 20 };
+    delete doc.id;
+    safe(() => Store.put(id, doc), a ? 'Asesoría guardada' : 'Asesoría añadida');
+  };
+  const btns = [{ label: 'Guardar', cls: 'primary', on: save }];
+  if (a) btns.unshift({ label: 'Eliminar', cls: 'danger', on: () => { if (vinc.length) { toast(`No se puede eliminar: tiene ${vinc.length} empresa${vinc.length === 1 ? '' : 's'} vinculada${vinc.length === 1 ? '' : 's'}. Cámbialas antes en Clientes.`, true); return false; } setTimeout(() => confirmBox('Eliminar asesoría', `Se borrará ${a.nombre}. Sus liquidaciones anteriores se conservan.`, 'Eliminar', () => { safe(() => Store.del(a.id), 'Asesoría eliminada'); }, true)); } });
+  modal(a ? 'Editar asesoría' : 'Nueva asesoría', body, btns);
+}
+ACTS['ase-edit'] = el => aseModal(el.dataset.k ? asesorias().find(x => x.codigo === el.dataset.k) : null);
+
 /* ===== simulador ===== */
 const SIMKEY = 'cierre-tl.sim';
 function simDefaults(){
   const c = cfg(); const ms = [...S.docs.values()].filter(d => d.kind === 'mov').map(d => d.mes).sort().slice(-9);
   const rs = ms.map(resumenMes); const avg = k => rs.length ? rs.reduce((a, r) => a + r[k], 0) / rs.length : 0;
-  return { cred: Math.round(avg('cred') / 10) * 10 || 550, precio: c.precio, coste: c.coste, otras: Math.round(avg('otras') / 10) * 10 || 690, pct: c.comisionPct, fijo: 0, autonomo: 330, neting: 40, gastos: 130, actual: 1300 };
+  return { cred: Math.round(avg('cred') / 10) * 10 || 550, precio: c.precio, coste: c.coste, otras: Math.round(avg('otras') / 10) * 10 || 690, pct: c.comisionPct, fijo: 0, autonomo: 300, neting: 0, gastos: 100, actual: 0 };
 }
 function simState(){ let s = null; try { s = JSON.parse(localStorage.getItem(SIMKEY) || 'null'); } catch (e) {} return { ...simDefaults(), ...(s || {}) }; }
 function simCalc(v){
@@ -1017,7 +1374,7 @@ ACTS['sim-reset'] = () => { try { localStorage.removeItem(SIMKEY); } catch (e) {
 const LOGO_SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 406 120\" width=\"406\" height=\"120\"><g transform=\"translate(10 10)\"><g transform=\"translate(0 0) scale(1.0)\"><circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"none\" stroke=\"#2F5288\" stroke-width=\"10\"/><path d=\"M 33 52 L 46 64 L 70 34\" fill=\"none\" stroke=\"#E2662A\" stroke-width=\"11\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g><path fill=\"#2F5288\" d=\"M124.75 56.0V28.7H131.75V32.75Q132.65 30.549999999999997 134.25 29.599999999999998Q136.3 28.4 139.15 28.4H140.75V34.9H138.4Q135.65 34.9 133.95 36.575Q132.25 38.25 132.25 41.3V56.0Z M151.0 56.6Q148.05 56.6 145.9 55.650000000000006Q143.75 54.7 142.60000000000002 52.925Q141.45000000000002 51.15 141.45000000000002 48.7Q141.45000000000002 46.4 142.5 44.625Q143.55 42.85 145.72500000000002 41.650000000000006Q147.9 40.45 151.15 39.95L158.70000000000002 38.75V38.0Q158.70000000000002 36.45 157.47500000000002 35.4Q156.25 34.349999999999994 154.15 34.349999999999994Q152.15 34.349999999999994 150.625 35.449999999999996Q149.10000000000002 36.55 148.4 38.349999999999994L142.4 35.5Q143.20000000000002 33.2 144.95000000000002 31.55Q146.70000000000002 29.9 149.15000000000003 29.0Q151.60000000000002 28.099999999999998 154.5 28.099999999999998Q157.95000000000002 28.099999999999998 160.60000000000002 29.349999999999998Q163.25 30.599999999999998 164.72500000000002 32.824999999999996Q166.20000000000002 35.05 166.20000000000002 38.0V56.0H159.20000000000002V53.4Q158.75 53.9 158.25 54.25Q156.8 55.45 155.0 56.025000000000006Q153.20000000000002 56.6 151.0 56.6ZM158.70000000000002 44.25 152.5 45.35Q150.9 45.65 150.05 46.375Q149.20000000000002 47.1 149.20000000000002 48.45Q149.20000000000002 49.7 150.15000000000003 50.400000000000006Q151.10000000000002 51.1 152.5 51.1Q154.35000000000002 51.1 155.75 50.3Q157.15 49.5 157.925 48.125Q158.70000000000002 46.75 158.70000000000002 45.1Z M173.50000000000003 56.0V35.2H168.9V28.7H173.50000000000003V28.299999999999997Q173.50000000000003 25.049999999999997 174.77500000000003 22.799999999999997Q176.05 20.549999999999997 178.45000000000002 19.349999999999998Q180.85000000000002 18.15 184.25000000000003 18.15Q184.9 18.15 185.65 18.224999999999998Q186.4 18.299999999999997 186.90000000000003 18.4V24.799999999999997Q186.4 24.7 186.025 24.674999999999997Q185.65 24.65 185.25000000000003 24.65Q183.15 24.65 182.07500000000002 25.575Q181.00000000000003 26.5 181.00000000000003 28.299999999999997V28.7H186.85000000000002V35.2H181.00000000000003V56.0Z M197.65 56.6Q194.70000000000002 56.6 192.55 55.650000000000006Q190.4 54.7 189.25 52.925Q188.10000000000002 51.15 188.10000000000002 48.7Q188.10000000000002 46.4 189.15000000000003 44.625Q190.20000000000002 42.85 192.375 41.650000000000006Q194.55 40.45 197.8 39.95L205.35000000000002 38.75V38.0Q205.35000000000002 36.45 204.125 35.4Q202.9 34.349999999999994 200.8 34.349999999999994Q198.8 34.349999999999994 197.27500000000003 35.449999999999996Q195.75000000000003 36.55 195.05 38.349999999999994L189.05 35.5Q189.85000000000002 33.2 191.60000000000002 31.55Q193.35000000000002 29.9 195.8 29.0Q198.25000000000003 28.099999999999998 201.15 28.099999999999998Q204.60000000000002 28.099999999999998 207.25000000000003 29.349999999999998Q209.90000000000003 30.599999999999998 211.37500000000003 32.824999999999996Q212.85000000000002 35.05 212.85000000000002 38.0V56.0H205.85000000000002V53.4Q205.4 53.9 204.9 54.25Q203.45000000000002 55.45 201.65000000000003 56.025000000000006Q199.85000000000002 56.6 197.65 56.6ZM205.35000000000002 44.25 199.15 45.35Q197.55 45.65 196.70000000000002 46.375Q195.85000000000002 47.1 195.85000000000002 48.45Q195.85000000000002 49.7 196.8 50.400000000000006Q197.75000000000003 51.1 199.15 51.1Q201.00000000000003 51.1 202.40000000000003 50.3Q203.8 49.5 204.57500000000002 48.125Q205.35000000000002 46.75 205.35000000000002 45.1Z M224.35000000000002 56.0V28.7H231.35000000000002V32.0Q232.10000000000002 30.5 233.50000000000003 29.599999999999998Q235.8 28.099999999999998 239.00000000000003 28.099999999999998Q242.40000000000003 28.099999999999998 245.00000000000003 29.799999999999997Q246.50000000000003 30.849999999999998 247.3 32.25Q248.40000000000003 30.65 249.90000000000003 29.7Q252.40000000000003 28.099999999999998 255.75000000000003 28.099999999999998Q258.70000000000005 28.099999999999998 260.975 29.4Q263.25 30.7 264.55 33.025Q265.85 35.349999999999994 265.85 38.45V56.0H258.35V40.05Q258.35 38.45 257.77500000000003 37.3Q257.20000000000005 36.15 256.15000000000003 35.5Q255.10000000000002 34.849999999999994 253.60000000000002 34.849999999999994Q252.15000000000003 34.849999999999994 251.07500000000005 35.5Q250.00000000000003 36.15 249.425 37.3Q248.85000000000002 38.45 248.85000000000002 40.05V56.0H241.35000000000002V40.05Q241.35000000000002 38.45 240.77500000000003 37.3Q240.20000000000002 36.15 239.15000000000003 35.5Q238.10000000000002 34.849999999999994 236.60000000000002 34.849999999999994Q235.15000000000003 34.849999999999994 234.07500000000005 35.5Q233.00000000000003 36.15 232.425 37.3Q231.85000000000002 38.45 231.85000000000002 40.05V56.0Z M282.85 56.6Q278.8 56.6 275.475 54.75Q272.15000000000003 52.9 270.175 49.675Q268.2 46.45 268.2 42.35Q268.2 38.2 270.175 35.0Q272.15000000000003 31.799999999999997 275.475 29.949999999999996Q278.8 28.099999999999998 282.85 28.099999999999998Q286.90000000000003 28.099999999999998 290.20000000000005 29.949999999999996Q293.5 31.799999999999997 295.475 35.0Q297.45 38.2 297.45 42.35Q297.45 46.45 295.475 49.675Q293.5 52.9 290.20000000000005 54.75Q286.90000000000003 56.6 282.85 56.6ZM282.85 49.85Q284.90000000000003 49.85 286.425 48.900000000000006Q287.95 47.95 288.825 46.25Q289.7 44.55 289.7 42.35Q289.7 40.15 288.825 38.474999999999994Q287.95 36.8 286.425 35.824999999999996Q284.90000000000003 34.849999999999994 282.85 34.849999999999994Q280.8 34.849999999999994 279.25 35.824999999999996Q277.7 36.8 276.825 38.474999999999994Q275.95 40.15 275.95 42.35Q275.95 44.55 276.825 46.25Q277.7 47.95 279.25 48.900000000000006Q280.8 49.85 282.85 49.85Z M300.35 56.0V18.15H307.85V56.0Z M311.85 56.0V28.7H319.35V56.0ZM311.85 26.25V18.75H319.35V26.25Z M323.35 56.0V28.7H330.35V32.0Q331.3 30.25 333.05 29.25Q335.15000000000003 28.099999999999998 338.0 28.099999999999998Q341.1 28.099999999999998 343.425 29.4Q345.75 30.7 347.05 33.025Q348.35 35.349999999999994 348.35 38.45V56.0H340.85V40.05Q340.85 38.45 340.225 37.3Q339.6 36.15 338.475 35.5Q337.35 34.849999999999994 335.85 34.849999999999994Q334.40000000000003 34.849999999999994 333.25 35.5Q332.1 36.15 331.475 37.3Q330.85 38.45 330.85 40.05V56.0Z M360.25 56.6Q357.3 56.6 355.15 55.650000000000006Q353.0 54.7 351.85 52.925Q350.7 51.15 350.7 48.7Q350.7 46.4 351.75 44.625Q352.8 42.85 354.975 41.650000000000006Q357.15000000000003 40.45 360.40000000000003 39.95L367.95 38.75V38.0Q367.95 36.45 366.725 35.4Q365.5 34.349999999999994 363.40000000000003 34.349999999999994Q361.40000000000003 34.349999999999994 359.875 35.449999999999996Q358.35 36.55 357.65000000000003 38.349999999999994L351.65000000000003 35.5Q352.45 33.2 354.2 31.55Q355.95 29.9 358.4 29.0Q360.85 28.099999999999998 363.75 28.099999999999998Q367.2 28.099999999999998 369.85 29.349999999999998Q372.5 30.599999999999998 373.975 32.824999999999996Q375.45 35.05 375.45 38.0V56.0H368.45V53.4Q368.0 53.9 367.5 54.25Q366.05 55.45 364.25 56.025000000000006Q362.45 56.6 360.25 56.6ZM367.95 44.25 361.75 45.35Q360.15000000000003 45.65 359.3 46.375Q358.45 47.1 358.45 48.45Q358.45 49.7 359.4 50.400000000000006Q360.35 51.1 361.75 51.1Q363.6 51.1 365.0 50.3Q366.40000000000003 49.5 367.175 48.125Q367.95 46.75 367.95 45.1Z\"/><rect x=\"122\" y=\"64\" width=\"140.8\" height=\"24\" rx=\"6\" fill=\"#E2662A\"/><path fill=\"#FFFFFF\" d=\"M133.008 81.0V70.57H136.886Q137.95 70.57 138.769 70.955Q139.588 71.34 140.05 72.075Q140.512 72.81 140.512 73.86Q140.512 74.938 140.001 75.694Q139.49 76.45 138.622 76.814L141.016 81.0H138.86L136.704 77.15H134.912V81.0ZM134.912 75.47H136.914Q137.432 75.47 137.81 75.267Q138.188 75.064 138.398 74.69999999999999Q138.608 74.336 138.608 73.86Q138.608 73.37 138.398 73.013Q138.188 72.656 137.81 72.453Q137.432 72.25 136.914 72.25H134.912Z M144.502 81.0V70.57H148.38Q149.444 70.57 150.26299999999998 70.955Q151.082 71.34 151.54399999999998 72.075Q152.006 72.81 152.006 73.86Q152.006 74.938 151.495 75.694Q150.984 76.45 150.11599999999999 76.814L152.51 81.0H150.354L148.198 77.15H146.406V81.0ZM146.406 75.47H148.408Q148.926 75.47 149.30399999999997 75.267Q149.682 75.064 149.892 74.69999999999999Q150.102 74.336 150.102 73.86Q150.102 73.37 149.892 73.013Q149.682 72.656 149.30399999999997 72.453Q148.926 72.25 148.408 72.25H146.406Z M155.996 81.0V70.57H157.9V75.12H162.338V70.57H164.256V81.0H162.338V76.8H157.9V81.0Z M168.49800000000002 81.0V70.57H170.40200000000002V75.12H174.84V70.57H176.758V81.0H174.84V76.8H170.40200000000002V81.0Z M185.73200000000003 81.0V70.57H189.13400000000001Q190.78600000000003 70.57 192.01100000000002 71.235Q193.23600000000002 71.9 193.90800000000002 73.069Q194.58 74.238 194.58 75.778Q194.58 77.304 193.90800000000002 78.487Q193.23600000000002 79.67 192.01100000000002 80.33500000000001Q190.78600000000003 81.0 189.13400000000001 81.0ZM187.63600000000002 79.32H189.17600000000002Q190.24 79.32 191.017 78.87899999999999Q191.794 78.438 192.228 77.64699999999999Q192.662 76.856 192.662 75.778Q192.662 74.686 192.228 73.902Q191.794 73.118 191.017 72.684Q190.24 72.25 189.17600000000002 72.25H187.63600000000002Z M198.33200000000002 81.0V70.57H200.23600000000002V81.0Z M209.42000000000002 81.168Q208.30000000000004 81.168 207.348 80.762Q206.39600000000002 80.356 205.68200000000002 79.628Q204.96800000000002 78.9 204.56900000000002 77.92Q204.17000000000002 76.94 204.17000000000002 75.77799999999999Q204.17000000000002 74.616 204.555 73.62899999999999Q204.94000000000003 72.642 205.64700000000002 71.92099999999999Q206.354 71.2 207.30600000000004 70.801Q208.25800000000004 70.402 209.37800000000004 70.402Q210.49800000000002 70.402 211.38700000000003 70.78Q212.27600000000004 71.158 212.89200000000005 71.781Q213.50800000000004 72.404 213.77400000000003 73.146L212.08000000000004 73.958Q211.78600000000003 73.146 211.086 72.642Q210.38600000000002 72.138 209.37800000000001 72.138Q208.39800000000002 72.138 207.64900000000003 72.6Q206.90000000000003 73.062 206.48700000000002 73.874Q206.07400000000004 74.686 206.07400000000004 75.778Q206.07400000000004 76.87 206.50100000000003 77.689Q206.92800000000003 78.508 207.68400000000003 78.97Q208.44000000000003 79.432 209.42000000000002 79.432Q210.21800000000002 79.432 210.89000000000004 79.117Q211.56200000000004 78.802 211.96800000000002 78.221Q212.37400000000002 77.64 212.37400000000002 76.842V76.8H209.37800000000001V75.19H214.27800000000002V76.24Q214.27800000000002 77.444 213.872 78.368Q213.46600000000004 79.292 212.77300000000002 79.91499999999999Q212.08000000000004 80.538 211.21200000000005 80.85300000000001Q210.34400000000002 81.168 209.42000000000002 81.168Z M218.03000000000003 81.0V70.57H219.93400000000003V81.0Z M226.024 81.0V72.25H223.322V70.57H230.602V72.25H227.942V81.0Z M233.15 81.0 236.74800000000002 70.57H239.21200000000002L242.81 81.0H240.738L239.996 78.76H235.964L235.208 81.0ZM236.51000000000002 77.08H239.45000000000002L237.98000000000002 72.684Z M246.21200000000002 81.0V70.57H248.116V79.32H252.582V81.0Z\"/></g></svg>";
 /* ===== presupuestos ===== */
 const PRE_CAT_DEF = [
-  { concepto: 'Créditos Time Laboris', desc: 'Registro de jornada y portal del empleado. Cada trabajador activo consume 1 crédito al mes (0,5 desde el trabajador 16.º).', precio: 3 },
+  { concepto: 'Créditos Time Laboris', desc: 'Registro de jornada y portal del empleado. Indica el número de trabajadores y se calculan los créditos al mes con la tarifa oficial.', precio: 3 },
   { concepto: 'APP modo Kiosko (anual)', desc: 'Fichaje desde tablet u otro dispositivo Android 5.0 o superior. Cuota anual.', precio: 30 },
   { concepto: 'Lector ZKTECO-ADMS-SF-M2', desc: 'Huella y tarjeta RFID. Cable RJ45 + WiFi (2,4 GHz), pantalla 2,8", 3.000 usuarios, 3.000 huellas, 3.000 tarjetas, 150.000 registros. Incluye peana de apoyo.', precio: 295 },
   { concepto: 'Lector ZKTECO-ADMS-SF-V3L', desc: 'Reconocimiento facial y tarjeta RFID. Cable RJ45 + WiFi (2,4 GHz), pantalla 2,4", 3.000 usuarios, 500 caras, 3.000 tarjetas, 200.000 registros.', precio: 350 },
@@ -1053,14 +1410,14 @@ function viewPresupuestos(){
   </div>
   ${all.length ? `<div class="filters"><select id="pre-f" class="sel-sm"><option value="">Todos los estados</option>${Object.entries(PRE_ESTADOS).map(([k, v]) => `<option value="${k}" ${PRE.filtro === k ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></div>
   <div class="tbl-wrap"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cliente</th><th>Asunto</th><th class="r">Base</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${list.map(p => { const t = preTotales(p), c = preCliente(p), e = PRE_ESTADOS[p.estado] || PRE_ESTADOS.borrador; return `<tr class="click" data-pre="${esc(p.id)}" tabindex="0"><td class="mono">${esc(p.num)}</td><td class="num">${fdate(p.fecha)}</td><td class="cn">${esc(c.nombre || '—')}</td><td class="cs">${esc(p.titulo || '')}</td><td class="r num">${money(t.base)}</td><td class="r num">${money(t.total)}</td><td>${chip(e[0], e[1])}</td><td class="r"><button class="btn sm" data-act="pre-ver" data-id="${esc(p.id)}">PDF</button></td></tr>`; }).join('')}
+  ${list.map(p => { const t = preTotales(p), c = preCliente(p), e = PRE_ESTADOS[p.estado] || PRE_ESTADOS.borrador; return `<tr class="click" data-pre="${esc(p.id)}" tabindex="0"><td class="mono">${esc(p.num)}${p.onedrive ? ` <a class="flag n" href="${esc(p.onedrive.url)}" target="_blank" rel="noopener" title="Abrir en OneDrive">OneDrive</a>` : ''}</td><td class="num">${fdate(p.fecha)}</td><td class="cn">${esc(c.nombre || '—')}</td><td class="cs">${esc(p.titulo || '')}</td><td class="r num">${money(t.base)}</td><td class="r num">${money(t.total)}</td><td>${chip(e[0], e[1])}</td><td class="r"><button class="btn sm" data-act="pre-ver" data-id="${esc(p.id)}">PDF</button></td></tr>`; }).join('')}
   </tbody></table></div>`
   : `<div class="empty"><h3>Aún no hay presupuestos</h3><p>Crea el primero: elige el cliente, añade los servicios y descárgalo en PDF con tu logo.</p><div class="row"><button class="btn primary" data-act="pre-new">+ Nuevo presupuesto</button></div></div>`}`;
 }
 function preEditor(p){
   const t = preTotales(p), cs = clientes(), c = p.cliente || {};
-  return `<div class="head"><div><h2>${p.num ? 'Presupuesto ' + esc(p.num) : 'Nuevo presupuesto'}</h2><p>Se guarda al pulsar «Guardar» o «Guardar y ver PDF». Lo guardado aparece en la lista de Presupuestos.</p></div>
-    <div class="row"><button class="btn ghost" data-act="pre-cancel">Volver</button>${p.id ? '<button class="btn" data-act="pre-dup">Duplicar</button>' : ''}<button class="btn primary" data-act="pre-prev">Guardar y ver PDF</button><button class="btn" data-act="pre-save">Guardar</button></div></div>
+  return `<div class="head"><div><h2>${p.num ? 'Presupuesto ' + esc(p.num) : 'Nuevo presupuesto'}</h2><p>«Guardar» lo deja registrado en la app.${p.onedrive ? ` Última subida: ${fdate(p.onedrive.fecha)}.` : ''}</p></div>
+    <div class="row"><button class="btn ghost" data-act="pre-cancel">Volver</button>${p.id ? '<button class="btn" data-act="pre-dup">Duplicar</button>' : ''}<button class="btn" data-act="pre-save">Guardar</button><button class="btn" data-act="pre-prev">Ver PDF</button><button class="btn" data-act="pre-mail">Correo (Thunderbird)</button></div></div>
   <form id="pre-form" class="stack" onsubmit="return false">
     <div class="grid2">
       <div class="panel"><h3>Cliente</h3><div class="fgrid" style="margin-top:10px">
@@ -1070,12 +1427,14 @@ function preEditor(p){
         <label class="field"><span>Correo</span><input data-pc="email" value="${esc(c.email)}"></label>
         <label class="field full"><span>Dirección</span><input data-pc="direccion" value="${esc(c.direccion)}"></label>`}
         <label class="field full"><span>Persona de contacto</span><input data-pc="contacto" value="${esc(c.contacto)}"></label>
+        ${p.cli ? '' : `<label class="full" style="display:flex;gap:10px;align-items:flex-start;font-size:14px"><input type="checkbox" data-pchk="anonimo" style="width:auto;margin-top:3px" ${p.anonimo ? 'checked' : ''}><span><b>Empresa sin identificar</b><br><span class="cs">No se crea ficha de cliente. Para cuando una asesoría pide precio para un cliente suyo sin decir cuál.</span></span></label>`}
       </div></div>
       <div class="panel"><h3>Presupuesto</h3><div class="fgrid" style="margin-top:10px">
         <label class="field"><span>Fecha</span><input type="date" data-p="fecha" value="${esc(p.fecha)}"></label>
         <label class="field"><span>Validez (días)</span><input data-p="validez" data-n="1" inputmode="numeric" value="${esc(p.validez)}"></label>
         <label class="field"><span>Estado</span><select data-p="estado">${Object.entries(PRE_ESTADOS).map(([k, v]) => `<option value="${k}" ${p.estado === k ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></label>
         <label class="field"><span>IVA %</span><input data-p="iva" data-n="1" value="${esc(p.iva)}"></label>
+        <label class="field full"><span>Asesoría que lo trae (opcional)</span><select data-p="asesoria"><option value="">Ninguna</option>${asesorias().map(a => `<option value="${esc(a.codigo)}" ${p.asesoria === a.codigo ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</select></label>
         <label class="field full"><span>Asunto</span><input data-p="titulo" value="${esc(p.titulo)}" placeholder="Registro de jornada con Time Laboris"></label>
         <label class="field full"><span>Introducción</span><textarea data-p="intro" rows="3" placeholder="Qué necesita el cliente y qué le propones.">${esc(p.intro)}</textarea></label>
       </div></div>
@@ -1083,7 +1442,7 @@ function preEditor(p){
     <div class="panel"><h3>Servicios</h3><p class="sub">Escribe o elige un servicio del catálogo; el precio se rellena solo si está vacío.</p>
       <datalist id="pre-cat">${preCat().map(x => `<option value="${esc(x.concepto)}">`).join('')}</datalist>
       <div class="tbl-wrap"><table><thead><tr><th style="min-width:200px">Concepto</th><th style="min-width:240px">Descripción</th><th class="r">Cantidad</th><th class="r">Precio</th><th class="r">Importe</th><th></th></tr></thead><tbody>
-      ${p.lineas.map((l, i) => `<tr><td><input list="pre-cat" data-l="concepto" data-i="${i}" value="${esc(l.concepto)}"></td><td><textarea rows="2" data-l="desc" data-i="${i}">${esc(l.desc)}</textarea></td><td class="r"><input class="inl" style="width:80px" data-l="cant" data-i="${i}" inputmode="decimal" value="${esc(String(l.cant).replace('.', ','))}"></td><td class="r"><input class="inl" style="width:100px" data-l="precio" data-i="${i}" inputmode="decimal" value="${esc(String(l.precio).replace('.', ','))}"></td><td class="r num" id="pre-imp-${i}">${money(num(l.cant) * num(l.precio))}</td><td class="r"><button type="button" class="btn sm ghost danger" data-act="pre-ldel" data-i="${i}" aria-label="Quitar línea">×</button></td></tr>`).join('')}
+      ${p.lineas.map((l, i) => `<tr><td><input list="pre-cat" data-l="concepto" data-i="${i}" value="${esc(l.concepto)}"></td><td><textarea rows="2" data-l="desc" data-i="${i}">${esc(l.desc)}</textarea></td><td class="r">${esCred(l) ? `<div class="cs">Trabajadores</div><input class="inl" style="width:80px" data-l="trab" data-i="${i}" inputmode="numeric" placeholder="nº" value="${esc(l.trab ?? '')}"><div class="cs" style="margin-top:6px">Créditos/mes</div>` : ''}<input class="inl" style="width:80px" data-l="cant" data-i="${i}" inputmode="decimal" value="${esc(String(l.cant).replace('.', ','))}" ${esCred(l) && num(l.trab) ? 'readonly title="Se calcula con el número de trabajadores"' : ''}>${esCred(l) ? `<div class="cs" id="pre-cr-${i}" style="max-width:120px;margin-left:auto;color:var(--warn)">${esc(credAviso(l))}</div>` : ''}</td><td class="r"><input class="inl" style="width:100px" data-l="precio" data-i="${i}" inputmode="decimal" value="${esc(String(l.precio).replace('.', ','))}"></td><td class="r num" id="pre-imp-${i}">${money(num(l.cant) * num(l.precio))}</td><td class="r"><button type="button" class="btn sm ghost danger" data-act="pre-ldel" data-i="${i}" aria-label="Quitar línea">×</button></td></tr>`).join('')}
       </tbody></table></div>
       <div class="row" style="justify-content:space-between;margin-top:12px;align-items:flex-start"><button type="button" class="btn sm" data-act="pre-ladd">+ Línea</button>
         <div class="sumbox" style="min-width:240px" id="pre-tot">${preTotHTML(p, t)}</div></div>
@@ -1114,12 +1473,27 @@ ACTS['cat-del'] = el => { catLeer(); PRE.catItems.splice(+el.dataset.i, 1); S.di
 ACTS['cat-save'] = async () => { catLeer(); const items = PRE.catItems.filter(x => (x.concepto || '').trim()); S.dirty = false; if (await safe(() => Store.put('catalogo', { kind: 'catalogo', items }), 'Catálogo guardado')) { PRE.cat = false; PRE.catItems = null; render(); } };
 document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#cat-form')) S.dirty = true; });
 function preTotHTML(p, t){ return `<div><span>Base imponible</span><span class="num">${money(t.base)}</span></div><div><span>IVA ${num(p.iva)} %</span><span class="num">${money(t.iva)}</span></div><div class="big"><span>Total</span><span class="num">${money(t.total)}</span></div>`; }
+/* --- calculadora de créditos (tarifa oficial de timelaboris.es/precio) --- */
+const esCred = l => /cr[eé]ditos/i.test((l && l.concepto) || '');
+function creditosTrab(n){ n = Math.max(0, Math.round(num(n))); if (!n) return 0; if (n <= 5) return 5; let c = Math.min(n, 15); if (n > 15) c += Math.floor(((Math.min(n, 100) - 15) * 50 + 50) / 100); if (n > 100) c += Math.floor(((n - 100) * 45 + 50) / 100); return c; }
+function credDesglose(n){
+  n = Math.max(0, Math.round(num(n))); const c = creditosTrab(n), f = x => String(x).replace('.', ',');
+  if (!n) return '';
+  if (n <= 5) return `Hasta 5 trabajadores: cuota mínima de 5 créditos al mes.`;
+  if (n <= 15) return `${n} trabajadores × 1 crédito = ${c} créditos al mes.`;
+  const t2 = Math.floor(((Math.min(n, 100) - 15) * 50 + 50) / 100), t3 = n > 100 ? c - 15 - t2 : 0;
+  return `15 créditos por los 15 primeros trabajadores + ${f(t2)} por los trabajadores del 16.º al ${n > 100 ? '100.º' : n + '.º'} (0,5 cada uno)${n > 100 ? ` + ${f(t3)} desde el 101.º (0,45 cada uno)` : ''} = ${c} créditos al mes.`;
+}
+const credDesc = n => `Registro de jornada y portal del empleado para ${Math.round(num(n))} trabajadores. ${credDesglose(n)}`;
+const credAviso = l => num(l.trab) > 200 ? 'Más de 200: Time Laboris lo presupuesta a medida.' : '';
+function credAplicar(l){ if (!esCred(l) || l.trab === '' || l.trab == null || !num(l.trab)) return false; l.cant = creditosTrab(l.trab); const auto = credDesc(l.trab); const viejo = l.desc || ''; if (!viejo.trim() || viejo === l.descAuto || /^Registro de jornada y portal del empleado\./.test(viejo)) l.desc = auto; l.descAuto = auto; return true; }
 function preLeer(){
   const p = S.editPre; if (!p) return;
   document.querySelectorAll('#pre-form [data-p]').forEach(i => { p[i.dataset.p] = i.dataset.n ? num(i.value) : i.value; });
   document.querySelectorAll('#pre-form [data-pchk]').forEach(i => { p[i.dataset.pchk] = i.checked; });
   p.cliente = p.cliente || {}; document.querySelectorAll('#pre-form [data-pc]').forEach(i => { p.cliente[i.dataset.pc] = i.value; });
-  document.querySelectorAll('#pre-form [data-l]').forEach(i => { const l = p.lineas[+i.dataset.i]; if (l) l[i.dataset.l] = (i.dataset.l === 'cant' || i.dataset.l === 'precio') ? (i.value.trim() === '' ? '' : num(i.value)) : i.value; });
+  document.querySelectorAll('#pre-form [data-l]').forEach(i => { const l = p.lineas[+i.dataset.i]; if (l) l[i.dataset.l] = (i.dataset.l === 'cant' || i.dataset.l === 'precio' || i.dataset.l === 'trab') ? (i.value.trim() === '' ? '' : num(i.value)) : i.value; });
+  p.lineas.forEach(credAplicar);
 }
 const PRE_COND = p => [
   ['Validez', `${num(p.validez) || 30} días desde la fecha del presupuesto.`],
@@ -1192,7 +1566,7 @@ h3{font-size:10pt;letter-spacing:.1em;text-transform:uppercase;color:#2F5288;mar
   <div class="tot"><table><tr><td>Base imponible</td><td class="r">${m(t.base)}</td></tr><tr><td>IVA ${num(p.iva)} %</td><td class="r">${m(t.iva)}</td></tr><tr class="g"><td>Total</td><td class="r">${m(t.total)}</td></tr></table></div>
   <h3>Condiciones</h3><div class="cond">${PRE_COND(p).map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join('')}</div>
   ${p.notas ? `<div class="notas">${esc(p.notas)}</div>` : ''}
-  <h3>Aceptación</h3><div style="font-size:9.3pt">Para aceptarlo, firma este presupuesto${p.encargo !== false ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a rafa@rafamolinarrhh.es.</div>
+  <h3>Aceptación</h3><div style="font-size:9.3pt">Para aceptarlo, firma este presupuesto${p.encargo !== false ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${esc(ID().email || 'nuestro correo')}.</div>
   <div class="sign"><div>Nombre y cargo</div><div>Firma y sello</div><div>Fecha</div></div>
   <div class="foot"><span><b>${esc(ID().marca)}</b>${ID().lema ? ' · ' + esc(ID().lema) : ''}</span><span>${esc(footTxt())}</span></div>
 </div>${p.encargo !== false ? preEncargoHTML(p) : ''}</body></html>`;
@@ -1273,7 +1647,7 @@ function preDocDef(p){
       sign([['El RESPONSABLE (firma y sello)', '*'], ['El ENCARGADO · ' + _i.nombre, '*']]),
       { stack: [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: .8, lineColor: LN }], margin: [0, 10, 0, 6] }, foot()], unbreakable: true });
   }
-  return { pageSize: 'A4', pageMargins: [40, 36, 40, 36], content, defaultStyle: { font: 'Roboto', fontSize: 9.5, color: INK, lineHeight: 1.15 }, info: { title: `Presupuesto ${p.num || ''} ${cl.nombre || ''}`, author: 'Rafa Molina RRHH' } };
+  return { pageSize: 'A4', pageMargins: [40, 36, 40, 36], content, defaultStyle: { font: 'Roboto', fontSize: 9.5, color: INK, lineHeight: 1.15 }, info: { title: `Presupuesto ${p.num || ''} ${cl.nombre || ''}`, author: _i.marca } };
 }
 async function prePDF(p, fr, btn){
   if (!window.pdfMake || !window.pdfMake.createPdf) { toast('No se pudo cargar el generador de PDF. Recarga la página y vuelve a intentarlo.', true); return; }
@@ -1288,21 +1662,23 @@ async function prePDF(p, fr, btn){
 function prePreview(p){
   const root = $('#modal-root');
   root.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Vista previa" style="align-items:stretch"><div class="modal-card" style="max-width:900px;display:flex;flex-direction:column;gap:10px;padding:14px">
-    <div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(p.num || 'Borrador')} · ${esc(preCliente(p).nombre || '')}</h3><div class="row"><button class="btn" data-pv="dl">Descargar HTML</button><button class="btn primary" data-pv="pdf">Descargar PDF</button><button class="btn ghost" data-pv="close">Cerrar</button></div></div>
+    <div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(p.num || 'Borrador')} · ${esc(preCliente(p).nombre || '')}</h3><div class="row"><button class="btn" data-pv="dl">Descargar HTML</button><button class="btn" data-pv="pdf">Descargar PDF</button><button class="btn" data-pv="mail">Correo (Thunderbird)</button><button class="btn ghost" data-pv="close">Cerrar</button></div></div>
     <iframe id="pre-frame" title="Vista previa del presupuesto" style="flex:1;min-height:70vh;width:100%;border:1px solid var(--line);border-radius:8px;background:#E9EDF2"></iframe>
-    <p class="note" style="margin:0">«Descargar PDF» genera el archivo PDF con tu logo, listo para enviar. Tarda unos segundos.</p></div></div>`;
+    <p class="note" style="margin:0">«Correo» descarga un .eml con el PDF adjunto para Thunderbird.${p.onedrive ? ` Último guardado en OneDrive: ${fdate(p.onedrive.fecha)}.` : ''}</p></div></div>`;
   const fr = $('#pre-frame'), html = preDocHTML(p); fr.srcdoc = html;
   root.querySelector('.modal').addEventListener('click', e => {
     const a = e.target.dataset.pv; if (e.target.classList.contains('modal') || a === 'close') { root.innerHTML = ''; return; }
     if (a === 'pdf') prePDF(p, fr, e.target);
+    if (a === 'od') preOneDrive(p, e.target);
+    if (a === 'mail') preCorreo(p);
     if (a === 'dl') saveFile(`Presupuesto ${p.num || 'borrador'} ${sx(preCliente(p).nombre || '', 40)}.html`, new Blob([html], { type: 'text/html' }));
   });
 }
 async function preGuardar(){
   preLeer(); const p = clone(S.editPre);
-  if (!p.cli && !(p.cliente?.nombre || '').trim()) { toast('Elige un cliente o escribe su razón social.', true); return null; }
+  if (!p.cli && !(p.cliente?.nombre || '').trim()) { if (p.anonimo) p.cliente = { ...(p.cliente || {}), nombre: 'Empresa sin identificar' }; else { toast('Elige un cliente o escribe su razón social, o marca «Empresa sin identificar».', true); return null; } }
   p.lineas = p.lineas.filter(l => (l.concepto || '').trim() || (l.desc || '').trim()); if (!p.lineas.length) { toast('Añade al menos un servicio.', true); return null; }
-  if (!p.cli) {
+  if (!p.cli && !p.anonimo) {
     const dc = p.cliente || {}, ex = matchCli({ cif: dc.cif, nombre: dc.nombre });
     if (ex) p.cli = ex;
     else {
@@ -1323,22 +1699,25 @@ ACTS['pre-new'] = () => { S.editPre = preVacio(); S.dirty = false; render(); scr
 ACTS['pre-cancel'] = () => { if (S.dirty && !confirm('Tienes cambios sin guardar en este presupuesto. ¿Salir sin guardarlos?')) return; S.editPre = null; S.dirty = false; render(); };
 ACTS['pre-save'] = () => preGuardar();
 ACTS['pre-prev'] = async () => { const p = await preGuardar(); if (p) prePreview(p); };
+ACTS['pre-od'] = async el => { const p = await preGuardar(); if (p) { const b = document.querySelector('[data-act="pre-od"]') || el; preOneDrive(p, b); } };
+ACTS['pre-mail'] = async () => { const p = await preGuardar(); if (p) preCorreo(p); };
 ACTS['pre-ver'] = el => { const p = S.docs.get(el.dataset.id); if (p) prePreview(p); };
 ACTS['pre-ladd'] = () => { preLeer(); S.editPre.lineas.push({ concepto: '', desc: '', cant: 1, precio: '' }); S.dirty = false; render(); };
 ACTS['pre-ldel'] = el => { preLeer(); S.editPre.lineas.splice(+el.dataset.i, 1); if (!S.editPre.lineas.length) S.editPre.lineas.push({ concepto: '', desc: '', cant: 1, precio: '' }); S.dirty = false; render(); };
 ACTS['pre-dup'] = () => { preLeer(); const p = clone(S.editPre); delete p.id; p.num = ''; p.fecha = today(); p.estado = 'borrador'; S.editPre = p; S.dirty = false; render(); toast('Copia creada. Cambia lo que necesites y guárdala.'); };
 ACTS['pre-del'] = () => { const p = S.editPre; confirmBox('Eliminar presupuesto', `Se borrará el presupuesto ${p.num}. No se puede deshacer.`, 'Eliminar', async () => { S.editPre = null; S.dirty = false; await safe(() => Store.del(p.id), 'Presupuesto eliminado'); render(); }, true); };
-document.addEventListener('click', e => { const r = e.target.closest('[data-pre]'); if (r && !e.target.closest('[data-act]')) { S.editPre = clone(S.docs.get(r.dataset.pre)); S.dirty = false; render(); scrollTo(0, 0); } }, true);
+document.addEventListener('click', e => { const r = e.target.closest('[data-pre]'); if (r && !e.target.closest('[data-act]') && !e.target.closest('a[href]')) { S.editPre = clone(S.docs.get(r.dataset.pre)); S.dirty = false; render(); scrollTo(0, 0); } }, true);
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'pre-f') { PRE.filtro = t.value; render(); }
   if (t.closest && t.closest('#pre-form') && t.dataset.p === 'cli') { preLeer(); S.dirty = false; render(); }
-  if (t.dataset && t.dataset.l === 'concepto') { const x = preCat().find(k => k.concepto === t.value); const l = S.editPre && S.editPre.lineas[+t.dataset.i]; if (x && l) { preLeer(); if (!l.desc) l.desc = x.desc; if (l.precio === '' || l.precio == null) l.precio = x.precio; S.dirty = false; render(); } }
+  if (t.dataset && t.dataset.l === 'concepto') { const x = preCat().find(k => k.concepto === t.value); const l = S.editPre && S.editPre.lineas[+t.dataset.i]; if (x && l) { preLeer(); if (!l.desc) l.desc = x.desc; if (l.precio === '' || l.precio == null) l.precio = x.precio; credAplicar(l); S.dirty = false; render(); } }
 });
 document.addEventListener('input', e => {
   if (!e.target.closest || !e.target.closest('#pre-form')) return;
   S.dirty = true; preLeer(); const p = S.editPre, t = preTotales(p);
-  p.lineas.forEach((l, i) => { const c = document.getElementById('pre-imp-' + i); if (c) c.textContent = money(num(l.cant) * num(l.precio)); });
+  p.lineas.forEach((l, i) => { const c = document.getElementById('pre-imp-' + i); if (c) c.textContent = money(num(l.cant) * num(l.precio));
+    if (esCred(l)) { const ci = document.querySelector(`#pre-form [data-l="cant"][data-i="${i}"]`), di = document.querySelector(`#pre-form [data-l="desc"][data-i="${i}"]`), av = document.getElementById('pre-cr-' + i), on = !!num(l.trab); if (ci) { ci.readOnly = on; if (on && document.activeElement !== ci) ci.value = String(l.cant).replace('.', ','); } if (di && on && document.activeElement !== di && di.value !== l.desc) di.value = l.desc; if (av) av.textContent = credAviso(l); } });
   const tt = document.getElementById('pre-tot'); if (tt) tt.innerHTML = preTotHTML(p, t);
 });
 
@@ -1423,6 +1802,57 @@ ACTS['esc-del'] = el => { const tr = escLeer(); tr.splice(+el.dataset.i, 1); esc
 document.addEventListener('submit', e => { if (e.target.id === 'esc-form') { e.preventDefault(); S.dirty = false; escGuardar({ tramos: escLeer() }).then(() => toast('Tramos guardados')); } });
 document.addEventListener('change', e => { if (e.target.id === 'esc-year') escGuardar({ year: e.target.value }); });
 document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.esc) S.dirty = true; });
+
+/* ===== certificados digitales (compra a Creative Quality y venta a clientes) ===== */
+const CERT_DEF = { ciudadano: { coste: 35, pvp: 60 }, juridica: { coste: 65, pvp: 90 } };
+const CERT = { filtro: 'todos' };
+function certTar(){ const c = cfg(); return { ciudadano: { coste: num(c.certCosteCiu || CERT_DEF.ciudadano.coste), pvp: num(c.certPvpCiu || CERT_DEF.ciudadano.pvp) }, juridica: { coste: num(c.certCosteJur || CERT_DEF.juridica.coste), pvp: num(c.certPvpJur || CERT_DEF.juridica.pvp) } }; }
+function certs(){ return [...S.docs.values()].filter(d => d.kind === 'cert'); }
+function certNombre(x){ return x.entidad ? x.entidad + ' · ' + x.solicitante : x.solicitante; }
+function certVenta(x){ if (x.propio) return 0; if (x.venta != null && x.venta !== '') return num(x.venta); const t = certTar()[x.tipo] || certTar().ciudadano; return r2(t.pvp / 1.21); }
+function certDias(v){ return Math.round((new Date(v) - new Date(today())) / 86400000); }
+function certMes(m){ const cs = certs().filter(x => x.coste != null && (x.fecha || '').slice(0, 7) === m); const coste = cs.reduce((a, x) => a + num(x.coste), 0), venta = cs.reduce((a, x) => a + certVenta(x), 0); return { n: cs.length, coste, venta, margen: r2(venta - coste) }; }
+function certPorFacturar(){ return certs().filter(x => x.coste != null && !x.propio && x.facturado !== 'si'); }
+function certRenov(){ return certs().filter(x => x.vence && !x.renovado && certDias(x.vence) <= 90 && certDias(x.vence) >= -60).sort((a, b) => a.vence.localeCompare(b.vence)); }
+function fdmy(s){ return s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '—'; }
+function viewCert(){
+  const y = S.mes.slice(0, 4), m = S.mes, tar = certTar();
+  const compras = certs().filter(x => x.coste != null).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  const delAno = compras.filter(x => (x.fecha || '').startsWith(y));
+  const cA = delAno.reduce((a, x) => a + num(x.coste), 0), vA = delAno.reduce((a, x) => a + certVenta(x), 0);
+  const mm = certMes(m), pf = certPorFacturar(), rn = certRenov();
+  const lista = CERT.filtro === 'pend' ? compras.filter(x => !x.propio && x.facturado !== 'si') : compras;
+  const tipoTxt = t => t === 'juridica' ? 'Jurídica' : 'Ciudadano';
+  const factChip = x => x.propio ? chip('c-neutral', 'Uso propio') : x.facturado === 'si' ? chip('c-ok', 'Facturado') : chip('c-warn', 'Sin confirmar');
+  return `<div class="head"><div><h2>Certificados digitales</h2><p>Los que compras a Creative Quality, lo que facturas a tus clientes y los que hay que renovar.</p></div></div>
+  <div class="kpis">
+    <div class="kpi"><label>Comprados en ${esc(y)}</label><span class="v">${intf(delAno.length)}</span><span class="s">coste ${money(cA)} sin IVA</span></div>
+    <div class="kpi good"><label>Margen en ${esc(y)}</label><span class="v">${money(vA - cA)}</span><span class="s">ventas ${money(vA)} sin IVA</span></div>
+    <div class="kpi good"><label>Margen de ${esc(mesLabel(m))}</label><span class="v">${money(mm.margen)}</span><span class="s">${mm.n} certificado${mm.n === 1 ? '' : 's'}</span></div>
+    <div class="kpi ${pf.length ? 'warn' : ''}"><label>Por confirmar facturación</label><span class="v">${intf(pf.length)}</span><span class="s">comprados sin marcar como facturados</span></div>
+    <div class="kpi ${rn.length ? 'warn' : ''}"><label>Renovaciones</label><span class="v">${intf(rn.length)}</span><span class="s">caducan en 90 días o caducaron hace menos de 60</span></div>
+  </div>
+  <div class="panel" style="margin-bottom:22px"><h3>Renovaciones</h3><p class="sub">Escribe al cliente antes de que caduque. Márcalo como renovado cuando lo vuelvas a tramitar.</p>
+    ${rn.length ? `<div class="tbl-wrap"><table><thead><tr><th>Caduca</th><th>Titular</th><th>Tipo</th><th class="r">Días</th><th></th></tr></thead><tbody>
+    ${rn.map(x => { const d = certDias(x.vence); return `<tr><td>${fdmy(x.vence)}</td><td>${esc(certNombre(x))}${x.propio ? ' ' + chip('c-neutral', 'Tuyo') : ''}</td><td>${tipoTxt(x.tipo)}</td><td class="r">${d < 0 ? chip('c-bad', 'Caducado hace ' + (-d)) : d <= 30 ? chip('c-warn', d + ' días') : chip('c-info', d + ' días')}</td><td class="r"><button class="btn sm" data-act="cert-renov" data-id="${esc(x.id)}">Renovado</button></td></tr>`; }).join('')}
+    </tbody></table></div>` : '<p class="note">No hay certificados que caduquen en los próximos 90 días.</p>'}
+  </div>
+  <div class="panel"><div class="row" style="justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px"><div><h3>Compras a Creative Quality</h3><p class="sub">Coste según tu panel de Creative Quality. Precio de venta por defecto: ciudadano ${money(tar.ciudadano.pvp)} y jurídica ${money(tar.juridica.pvp)} con IVA. Puedes cambiarlo en cada línea.</p></div>
+    <div class="row"><button class="btn sm ${CERT.filtro === 'todos' ? 'primary' : ''}" data-act="cert-f" data-v="todos">Todos</button><button class="btn sm ${CERT.filtro === 'pend' ? 'primary' : ''}" data-act="cert-f" data-v="pend">Por confirmar</button></div></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Titular</th><th>Tipo</th><th>Factura CQ</th><th class="r">Coste</th><th class="r">Venta sin IVA</th><th class="r">Margen</th><th>Facturación</th><th></th></tr></thead><tbody>
+    ${lista.map(x => { const v = certVenta(x); return `<tr><td>${fdmy(x.fecha)}</td><td>${esc(certNombre(x))}</td><td>${tipoTxt(x.tipo)}</td><td>${esc(x.factura || '—')}</td><td class="r num">${money(x.coste)}</td>
+      <td class="r">${x.propio ? '—' : `<input class="inl" style="width:90px;text-align:right" data-cert-venta="${esc(x.id)}" inputmode="decimal" value="${esc(String(v).replace('.', ','))}">`}</td>
+      <td class="r num">${x.propio ? '—' : money(v - num(x.coste))}</td><td>${factChip(x)}</td>
+      <td class="r">${x.propio ? '' : `<button class="btn sm" data-act="cert-fact" data-id="${esc(x.id)}">${x.facturado === 'si' ? 'Desmarcar' : 'Facturado'}</button>`}</td></tr>`; }).join('') || '<tr><td colspan="9" class="note">Sin certificados.</td></tr>'}
+    </tbody></table></div>
+    <p class="note" style="margin-top:10px">Se actualiza leyendo tu área privada de Creative Quality (Pedidos y Certificados).</p>
+  </div>`;
+}
+async function certPut(id, patch){ const d = S.docs.get(id); if (!d) return; const n = { ...d, ...patch }; delete n.id; await safe(() => Store.put(id, n)); render(); }
+ACTS['cert-f'] = el => { CERT.filtro = el.dataset.v; render(); };
+ACTS['cert-fact'] = el => { const d = S.docs.get(el.dataset.id); certPut(el.dataset.id, { facturado: d && d.facturado === 'si' ? '' : 'si' }); };
+ACTS['cert-renov'] = el => certPut(el.dataset.id, { renovado: today() });
+document.addEventListener('change', e => { const id = e.target.dataset && e.target.dataset.certVenta; if (id) certPut(id, { venta: num(e.target.value) }); });
 
 /* ===== arranque: acceso, nube y demostración ===== */
 const CONF = window.CIERRE_CONFIG || {};
@@ -1555,7 +1985,7 @@ function demoSeed(){
     ['cli_D005', 'Asesoría Triana Gestión, S.L.', 'B99000055', 3, 'Transferencia', 60],
     ['cli_D006', 'Limpiezas Brillo Andaluz, S.L.', 'B99000066', 2.9, 'Recibo domiciliado', 310]
   ];
-  const docs = [{ id: 'ajustes', kind: 'ajustes', nombre: 'Distribuciones Ejemplo, S.L.', marca: 'Ejemplo RRHH', lema: 'Distribuidor de Time Laboris', nif: 'B99999990', direccion: 'Calle Ejemplo, 1 · 41001 Sevilla', email: 'hola@ejemplo-rrhh.es', web: 'ejemplo-rrhh.es', iban, precio: 3, coste: 1.5, iva: 21, irpfVentas: 0, comisionPct: 20, ivaComision: 21, irpfComision: 0, concepto: 'Créditos Time Laboris', desde: '2026-07', seq: 'RCUR', esquema: 'CORE', saldoInicial: 500, cqNombre: 'Creative Quality S.L.', cqCif: 'B18799353' }];
+  const docs = [{ id: 'ajustes', kind: 'ajustes', nombre: 'Distribuciones Ejemplo, S.L.', marca: 'Ejemplo RRHH', lema: 'Distribuidor de Time Laboris', nif: 'B99999990', direccion: 'Calle Ejemplo, 1 · 41001 Sevilla', email: 'hola@ejemplo-rrhh.es', web: 'ejemplo-rrhh.es', iban, precio: 3, coste: 1.5, iva: 21, irpfVentas: 0, comisionPct: 20, ivaComision: 21, irpfComision: 0, concepto: 'Créditos Time Laboris', desde: '2026-07', seq: 'RCUR', esquema: 'CORE', saldoInicial: 500, cqNombre: 'Creative Quality S.L.', cqCif: 'B18799353', certPvpCiu: 60, certPvpJur: 96, certCosteCiu: 35, certCosteJur: 65 }];
   cli.forEach(([id, nombre, cif, precio, formaPago], i) => docs.push({ id, kind: 'cliente', codigo: id.slice(4), nombre, cif, precio, formaPago, iban: formaPago.startsWith('Recibo') ? iban : '', mandatoRef: 'TL-' + id.slice(4), mandatoFecha: '2026-07-01', alias: [], email: 'administracion@' + nombre.split(' ')[0].toLowerCase().normalize('NFD').replace(/[^a-z]/g, '') + '.example', direccion: 'Sevilla' }));
   ['2026-08', '2026-09', '2026-10', '2026-11'].forEach((m, k) => {
     const rec = cli.map(([id, nombre, cif, , , base], i) => ({ id: `d${m}-${i}`, fecha: `${m}-0${(i % 8) + 1}`, nombre, cif, creditos: Math.round(base * (1 + 0.06 * k) / 10) * 10, tipo: 'creditos', ref: '', cli: id, origen: 'yo' }));
@@ -1563,6 +1993,21 @@ function demoSeed(){
     docs.push({ id: 'mov_' + m, kind: 'mov', mes: m, recargas: rec, compras: [{ id: `c${m}`, fecha: `${m}-01`, creditos: 1500, ref: 'TL' + (2026100 + k), precio: 1.5 }], otras: [] });
   });
   docs.push({ id: 'pre_P-2026-001', kind: 'presupuesto', num: 'P-2026-001', fecha: '2026-11-10', validez: 30, iva: 21, titulo: 'Control horario Time Laboris', intro: '', notas: '', estado: 'enviado', cli: '', encargo: true, formaPago: 'Recibo domiciliado mensual', plazo: '1 semana', cliente: { nombre: 'Frutas Vega Sevillana, S.L.', cif: 'B99000077', direccion: 'Mercasevilla, nave 3', email: 'compras@frutasvega.example', contacto: 'Ana Ruiz' }, lineas: [{ concepto: 'Créditos', desc: 'Créditos Time Laboris (1 crédito = 1 trabajador/mes)', cant: 40, precio: 3 }, { concepto: 'ZKTECO V3L', desc: 'Lector facial y huella', cant: 1, precio: 350 }] });
+  // asesorías colaboradoras (inventadas)
+  docs.push({ id: 'ase_B99100001', kind: 'asesoria', codigo: 'B99100001', nombre: 'Gestoría Ejemplo Sur, S.L.', cif: 'B99100001', pct: 20, email: 'info@gestoria-ejemplo.example', acuerdo: { fecha: '2026-07-01', pct: 20, minimo: 500, minEmp: 2, lugar: 'Sevilla' }, firmado: { sinFirmar: true } });
+  docs.push({ id: 'ase_B99100002', kind: 'asesoria', codigo: 'B99100002', nombre: 'Asesores Laborales Demo, S.L.P.', cif: 'B99100002', pct: 15 });
+  ['cli_D001', 'cli_D003', 'cli_D005'].forEach(id => { const c = docs.find(x => x.id === id); if (c) c.asesoria = 'B99100001'; });
+  { const c = docs.find(x => x.id === 'cli_D006'); if (c) c.asesoria = 'B99100002'; }
+  // escala de compra 2027 (convenio de distribución)
+  docs.push({ id: 'escala', kind: 'escala', year: '2027', tramos: [{ desde: 1000, precio: 2.4 }, { desde: 5000, precio: 2.1 }, { desde: 6001, precio: 1.8 }, { desde: 8001, precio: 1.65 }, { desde: 10001, precio: 1.5 }, { desde: 20001, precio: 1.35 }] });
+  // certificados digitales (titulares inventados)
+  const cert = (id, fecha, tipo, entidad, solicitante, vence, extra) => docs.push({ id, kind: 'cert', fecha, tipo, entidad, solicitante, vence, ...extra });
+  cert('cert_D1', '2026-11-05', 'ciudadano', '', 'Ana Pérez Ejemplo', '2031-11-05', { coste: 35, factura: 'N000101', facturado: 'si' });
+  cert('cert_D2', '2026-10-21', 'juridica', 'Talleres Guadalquivir, S.L.', 'Luis Martín Demo', '2028-10-21', { coste: 65, factura: 'N000098', venta: 74.38, facturado: 'si' });
+  cert('cert_D3', '2026-09-14', 'juridica', 'Hotel Mirador del Sur, S.A.', 'Carmen Ruiz Demo', '2028-09-14', { coste: 65, factura: 'N000090', venta: 74.38 });
+  cert('cert_D4', '2026-08-02', 'ciudadano', '', 'Pedro Gómez Ejemplo', '2031-08-02', { coste: 35, factura: 'N000083', facturado: 'si' });
+  cert('cert_D5', '2025-01-10', 'juridica', 'Panadería La Espiga, S.L.', 'Rosa Díaz Demo', '2027-01-10', { origen: 'anterior' });
+  cert('cert_D6', '2021-11-15', 'ciudadano', '', 'Javier López Ejemplo', '2026-11-14', { origen: 'anterior' });
   return docs;
 }
 
