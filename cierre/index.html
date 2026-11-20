@@ -1161,11 +1161,11 @@ function preCorreo(p){
   const ls = (p.lineas || []).filter(l => num(l.cant) * num(l.precio)), men = r2(ls.filter(esCred).reduce((a, l) => a + num(l.cant) * num(l.precio), 0)), uni = r2(ls.filter(l => !esCred(l)).reduce((a, l) => a + num(l.cant) * num(l.precio), 0));
   const importe = men && uni ? `Cuota mensual: ${money(men)} + IVA.\nPago único (${ls.filter(l => !esCred(l)).map(l => (l.concepto || '').toLowerCase()).join(', ')}): ${money(uni)} + IVA.` : men ? `Cuota mensual: ${money(men)} + IVA (${money(r2(men * (1 + num(p.iva ?? 21) / 100)))} con IVA).` : `Importe: ${money(t.base)} + IVA (${money(t.total)} con IVA).`;
   const np = nombrePila(cl.contacto);
-  const encTxt = p.encargo !== false ? ' (se acompaña al presupuesto contrato de encargo de tratamiento de datos de la empresa)' : '';
-  const demoAse = a ? `\nPara la demo, tal y como hemos hablado, necesito que ${nombreBonito(a.nombre)} me remita el documento ITA de la empresa${encTxt}.` : `\nPara la demo, necesito que solicites a tu asesor el documento ITA de la empresa y me lo envíes${encTxt}.`;
+  const encTxt = (p.encargo !== false && esTLp(p)) ? ' (se acompaña al presupuesto contrato de encargo de tratamiento de datos de la empresa)' : '';
+  const demoAse = !esTLp(p) ? '' : a ? `\nPara la demo, tal y como hemos hablado, necesito que ${nombreBonito(a.nombre)} me remita el documento ITA de la empresa${encTxt}.` : `\nPara la demo, necesito que solicites a tu asesor el documento ITA de la empresa y me lo envíes${encTxt}.`;
   const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el presupuesto ${p.num || ''}${p.titulo ? ' · ' + p.titulo : ''}.${demoAse}\n\n${importe}\nValidez: ${num(p.validez) || 30} días.\nPara aceptarlo, fírmalo y devuélvemelo respondiendo a este correo. Cualquier duda, quedo a tu disposición.`;
   const _to = cl.email || (a && a.email) || '', _cc = a && a.email && a.email !== _to ? a.email : '';
-  correoModal({ titulo: 'Enviar presupuesto ' + (p.num || ''), to: _to, cc: _cc, ccNota: a ? (a.email ? (_cc ? 'En copia la asesoría ' + a.nombre + '.' : '') : 'La asesoría ' + a.nombre + ' no tiene correo en su ficha: añádelo en Asesorías para ponerla en copia.') : '', subject: `Presupuesto ${p.num || ''} · Time Laboris${a ? ' · ' + a.nombre : cl.nombre ? ' · ' + cl.nombre : ''}`, text, file: { name: preFile(p) + '.pdf', make: () => prePdfBlob(p) }, marcar: p.estado === 'borrador' ? 'Marcar el presupuesto como «Enviado»' : '', onDone: v => { if (v.marcar && p.id) { const d = clone(S.docs.get(p.id) || p); delete d.id; d.estado = 'enviado'; safe(() => Store.put(p.id, d)); } } });
+  correoModal({ titulo: 'Enviar presupuesto ' + (p.num || ''), to: _to, cc: _cc, ccNota: a ? (a.email ? (_cc ? 'En copia la asesoría ' + a.nombre + '.' : '') : 'La asesoría ' + a.nombre + ' no tiene correo en su ficha: añádelo en Asesorías para ponerla en copia.') : '', subject: `Presupuesto ${p.num || ''} · ${esTLp(p) ? 'Time Laboris' : (p.titulo || 'Página web')}${a ? ' · ' + a.nombre : cl.nombre ? ' · ' + cl.nombre : ''}`, text, file: { name: preFile(p) + '.pdf', make: () => prePdfBlob(p) }, marcar: p.estado === 'borrador' ? 'Marcar el presupuesto como «Enviado»' : '', onDone: v => { if (v.marcar && p.id) { const d = clone(S.docs.get(p.id) || p); delete d.id; d.estado = 'enviado'; safe(() => Store.put(p.id, d)); } } });
 }
 
 /* --- acuerdos --- */
@@ -1567,14 +1567,15 @@ function preLeer(){
   document.querySelectorAll('#pre-form [data-l]').forEach(i => { const l = p.lineas[+i.dataset.i]; if (l) l[i.dataset.l] = (i.dataset.l === 'cant' || i.dataset.l === 'precio' || i.dataset.l === 'trab') ? (i.value.trim() === '' ? '' : num(i.value)) : i.value; });
   p.lineas.forEach(credAplicar);
 }
+const esTLp = p => (p.lineas || []).some(l => /time laboris|cr[eé]ditos|kiosko|zkteco|datafox|tarjetas rfid|tablet|peana|puesta en marcha/i.test(l.concepto || ''));
 const PRE_COND = p => [
   ['Validez', `${num(p.validez) || 30} días desde la fecha del presupuesto.`],
-  ['Demo gratuita', `Si el alta se hace antes del día ${demoDia()}, la prueba dura hasta el último día de ese mes; a partir del día ${demoDia()}, hasta el último día del mes siguiente.`],
+  ...(esTLp(p) ? [['Demo gratuita', `Si el alta se hace antes del día ${demoDia()}, la prueba dura hasta el último día de ese mes; a partir del día ${demoDia()}, hasta el último día del mes siguiente.`],] : []),
   ['Forma de pago', p.formaPago + '.'],
   ['Facturación', 'Factura electrónica emitida por ' + ID().marca + ' y enviada por correo.'],
   ...(p.plazo ? [['Puesta en marcha', p.plazo + ' desde la aceptación.']] : []),
   ['Soporte', cfg().soporte || 'Por correo y videollamada, en horario laboral.'],
-  ['Protección de datos', 'Los datos de los trabajadores se tratan solo para prestar el servicio, como encargado del tratamiento (art. 28 RGPD).']
+  ...(esTLp(p) ? [['Protección de datos', 'Los datos de los trabajadores se tratan solo para prestar el servicio, como encargado del tratamiento (art. 28 RGPD).']] : [])
 ];
 function preDocHTML(p){
   const c = cfg(), cl = preCliente(p), t = preTotales(p), hasta = addDays(p.fecha || today(), num(p.validez) || 30);
@@ -1638,10 +1639,10 @@ h3{font-size:10pt;letter-spacing:.1em;text-transform:uppercase;color:#2F5288;mar
   <div class="tot"><table><tr><td>Base imponible</td><td class="r">${m(t.base)}</td></tr><tr><td>IVA ${num(p.iva)} %</td><td class="r">${m(t.iva)}</td></tr><tr class="g"><td>Total</td><td class="r">${m(t.total)}</td></tr></table></div>
   <h3>Condiciones</h3><div class="cond">${PRE_COND(p).map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join('')}</div>
   ${p.notas ? `<div class="notas">${esc(p.notas)}</div>` : ''}
-  <h3>Aceptación</h3><div style="font-size:9.3pt">Para aceptarlo, firma este presupuesto${p.encargo !== false ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${esc(ID().email || 'nuestro correo')}.</div>
+  <h3>Aceptación</h3><div style="font-size:9.3pt">Para aceptarlo, firma este presupuesto${(p.encargo !== false && esTLp(p)) ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${esc(ID().email || 'nuestro correo')}.</div>
   <div class="sign"><div>Nombre y cargo</div><div>Firma y sello</div><div>Fecha</div></div>
   <div class="foot"><span><b>${esc(ID().marca)}</b>${ID().lema ? ' · ' + esc(ID().lema) : ''}</span><span>${esc(footTxt())}</span></div>
-</div>${p.encargo !== false ? preEncargoHTML(p) : ''}</body></html>`;
+</div>${(p.encargo !== false && esTLp(p)) ? preEncargoHTML(p) : ''}</body></html>`;
 }
 function encClausulas(p, bio, e){
   const cl_ = [
@@ -1704,11 +1705,11 @@ function preDocDef(p){
     { table: { widths: [95, '*'], body: PRE_COND(p).map(([k, v]) => [{ text: k, bold: true }, v]) }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingTop: () => 1.5, paddingBottom: () => 1.5, paddingLeft: () => 0 }, fontSize: 9 },
     p.notas ? { text: p.notas, fontSize: 9, margin: [0, 6, 0, 0] } : '',
     h3('Aceptación'),
-    { text: `Para aceptarlo, firma este presupuesto${p.encargo !== false ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${ID().email || 'nuestro correo'}.`, fontSize: 9, margin: [0, 0, 0, 6] },
+    { text: `Para aceptarlo, firma este presupuesto${(p.encargo !== false && esTLp(p)) ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${ID().email || 'nuestro correo'}.`, fontSize: 9, margin: [0, 0, 0, 6] },
     sign([['Nombre y cargo', '*'], ['Firma y sello', '*'], ['Fecha', 90]]),
     { stack: [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: .8, lineColor: LN }], margin: [0, 14, 0, 6] }, foot()], unbreakable: true }
   ];
-  if (p.encargo !== false) {
+  if ((p.encargo !== false && esTLp(p))) {
     const bio = (p.lineas || []).some(l => /ZKTECO|huella|facial|biom/i.test((l.concepto || '') + ' ' + (l.desc || '')));
     content.push({ text: '', pageBreak: 'after' },
       ...header('ENCARGO DE TRATAMIENTO', `Anexo al presupuesto ${p.num || 'borrador'}\nArtículo 28 del RGPD`),
