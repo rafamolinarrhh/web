@@ -2014,6 +2014,7 @@ function demoSeed(){
 async function init(){
   const h = location.hash.slice(1); if (VIEWS.includes(h)) S.view = h;
   S.mode = 'loading'; render();
+  if (/[?&]demo\b/.test(location.search)) { $('#who').innerHTML = ''; return startDemo(); }
   if (!CLOUD) { authView('login'); return; }
   SB = window.supabase.createClient(CONF.supabaseUrl, CONF.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } });
   SB.auth.onAuthStateChange((ev, session) => { if (ev === 'PASSWORD_RECOVERY') { SESSION = session; authView('setpw'); } if (ev === 'SIGNED_OUT') { SESSION = null; } });
