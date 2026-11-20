@@ -1082,11 +1082,11 @@ function emlBlob({ to, cc, subject, text, files }){
 const firma = () => `Un saludo,\n${ID().nombre}\n${ID().marca}${ID().email ? '\n' + ID().email : ''}`;
 const nombrePila = s => { const t = String(s || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0]; return t && !/^(d\.|dña\.|d\/dña\.)$/i.test(t) ? t : ''; };
 // ventana de correo: genera un .eml con el adjunto para abrir en Thunderbird
-function correoModal({ titulo, to, subject, text, file, marcar, onDone }){
+function correoModal({ titulo, to, cc, ccNota, subject, text, file, marcar, onDone }){
   modal(titulo, `<p>Se descarga un .zip con el correo dentro (con el PDF adjunto). Abre el zip, haz doble clic en el archivo .eml para abrirlo en Thunderbird y elige <b>Mensaje → Editar como mensaje nuevo</b>; revísalo y envíalo.</p>
   <div class="fgrid">
     <label class="field full"><span>Para</span><input name="to" value="${esc(to || '')}" placeholder="correo@empresa.com"></label>
-    <label class="field full"><span>CC (opcional)</span><input name="cc"></label>
+    <label class="field full"><span>CC (opcional)</span><input name="cc" value="${esc(cc || '')}">${ccNota ? `<small>${esc(ccNota)}</small>` : ''}</label>
     <label class="field full"><span>Asunto</span><input name="subject" value="${esc(subject)}"></label>
     <label class="field full"><span>Texto</span><textarea name="text" rows="11">${esc(text)}</textarea></label>
     <p class="note full" style="margin:0">Adjunto: ${esc(file.name)}</p>
@@ -1127,7 +1127,8 @@ function preCorreo(p){
   const importe = men && uni ? `Cuota mensual: ${money(men)} + IVA.\nPago único (${ls.filter(l => !esCred(l)).map(l => (l.concepto || '').toLowerCase()).join(', ')}): ${money(uni)} + IVA.` : men ? `Cuota mensual: ${money(men)} + IVA (${money(r2(men * (1 + num(p.iva ?? 21) / 100)))} con IVA).` : `Importe: ${money(t.base)} + IVA (${money(t.total)} con IVA).`;
   const np = nombrePila(cl.contacto);
   const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el presupuesto ${p.num || ''}${p.titulo ? ' · ' + p.titulo : ''}.\n\n${importe}\nValidez: ${num(p.validez) || 30} días.\n\nPara aceptarlo, fírmalo y devuélvemelo respondiendo a este correo. Cualquier duda, quedo a tu disposición.\n\n${firma()}`;
-  correoModal({ titulo: 'Enviar presupuesto ' + (p.num || ''), to: cl.email || (a && a.email) || '', subject: `Presupuesto ${p.num || ''} · Time Laboris${a ? ' · ' + a.nombre : cl.nombre ? ' · ' + cl.nombre : ''}`, text, file: { name: preFile(p) + '.pdf', make: () => prePdfBlob(p) }, marcar: p.estado === 'borrador' ? 'Marcar el presupuesto como «Enviado»' : '', onDone: v => { if (v.marcar && p.id) { const d = clone(S.docs.get(p.id) || p); delete d.id; d.estado = 'enviado'; safe(() => Store.put(p.id, d)); } } });
+  const _to = cl.email || (a && a.email) || '', _cc = a && a.email && a.email !== _to ? a.email : '';
+  correoModal({ titulo: 'Enviar presupuesto ' + (p.num || ''), to: _to, cc: _cc, ccNota: a ? (a.email ? (_cc ? 'En copia la asesoría ' + a.nombre + '.' : '') : 'La asesoría ' + a.nombre + ' no tiene correo en su ficha: añádelo en Asesorías para ponerla en copia.') : '', subject: `Presupuesto ${p.num || ''} · Time Laboris${a ? ' · ' + a.nombre : cl.nombre ? ' · ' + cl.nombre : ''}`, text, file: { name: preFile(p) + '.pdf', make: () => prePdfBlob(p) }, marcar: p.estado === 'borrador' ? 'Marcar el presupuesto como «Enviado»' : '', onDone: v => { if (v.marcar && p.id) { const d = clone(S.docs.get(p.id) || p); delete d.id; d.estado = 'enviado'; safe(() => Store.put(p.id, d)); } } });
 }
 
 /* --- acuerdos --- */
