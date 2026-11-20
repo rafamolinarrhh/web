@@ -181,7 +181,7 @@ textarea{resize:vertical}
     <button class="tab" data-nav="presupuestos">Presupuestos</button>
     <button class="tab" data-nav="escala">Escala de compra</button>
     <button class="tab" data-nav="certificados">Certificados</button>
-    <button class="tab" data-nav="ajustes">Ajustes</button>
+    <button class="tab" data-nav="ajustes">Mi ficha</button>
   </nav>
   <label class="monthsel"><span class="hint" style="font-size:12.5px;color:var(--muted)">Mes</span><select id="sel-mes" aria-label="Mes"></select></label>
   <div class="who" id="who"></div>
@@ -220,7 +220,7 @@ const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(
 /* ===== estado ===== */
 const S = { docs: new Map(), view: 'resumen', mes: thisMonth(), mode: 'loading', slow: false, err: null, q: '', editCli: null, dirty: false };
 let DL = null;
-const ID = () => { const c = cfg(); const marca = c.marca || c.nombre || 'Tu empresa'; return { nombre: c.nombre || marca, marca, nif: c.nif || '', dir: c.direccion || '', email: c.email || '', web: c.web || '', lema: c.lema || '', logo: c.logo || '' }; };
+const ID = () => { const c = cfg(); const marca = c.marca || c.nombre || 'Tu empresa'; return { nombre: c.nombre || marca, marca, nif: c.nif || '', dir: [c.direccion, [c.cp, c.poblacion].filter(Boolean).join(' '), c.provincia].filter(Boolean).join(', '), email: c.email || '', web: c.web || '', lema: c.lema || '', logo: c.logo || '' }; };
 const logoHTML = () => { const i = ID(); return i.logo ? `<img src="${i.logo}" alt="" style="max-height:64px;max-width:240px">` : `<div style="font:800 20pt 'Plus Jakarta Sans',Arial,sans-serif;color:#2F5288">${esc(i.marca)}</div>`; };
 const logoPDF = () => { const i = ID(); if (i.logo && i.logo.startsWith('data:image/svg')) { try { const b = i.logo.split(',')[1]; return { svg: i.logo.includes(';base64,') ? decodeURIComponent(escape(atob(b))) : decodeURIComponent(b), width: 165 }; } catch (e) {} } if (i.logo) return { image: i.logo, fit: [165, 52] }; return { text: i.marca, bold: true, fontSize: 18, color: '#2F5288', width: 165 }; };
 const footTxt = () => { const i = ID(); return [i.web, i.email].filter(Boolean).join(' · '); };
@@ -281,6 +281,7 @@ function modal(title, bodyHTML, buttons){
 const confirmBox = (title, text, label, on, danger) => modal(title, `<p>${esc(text)}</p>`, [{ label, cls: danger ? 'danger' : 'primary', on }]);
 
 /* ===== cálculos ===== */
+const irpfCli = cli => (cli && cli.tipoCliente === 'particular') ? 0 : num(cfg().irpfVentas);
 function precioDe(r){ if (r.precio != null && r.precio !== '') return num(r.precio); const c = r.cli && cliById(r.cli); return c && c.precio != null && c.precio !== '' ? num(c.precio) : cfg().precio; }
 function keyOf(r){ return r.cli || ('?' + normName(r.nombre)); }
 function facturasMes(m){
@@ -295,8 +296,8 @@ function facturasMes(m){
   }
   return Object.values(out).map(f => {
     f.lineas = Object.values(f.lineas); const base = r2(f.lineas.reduce((s, l) => s + l.cantidad * l.precio, 0));
-    const iva = r2(base * c.iva / 100), irpf = r2(base * c.irpfVentas / 100);
     const cli = f.cli ? cliById(f.cli) : null;
+    const iva = r2(base * c.iva / 100), irpf = r2(base * irpfCli(cli) / 100);
     const st = est[f.key] || {};
     const minP = Math.min(...f.lineas.filter(l => !l.extra).map(l => l.precio).concat([Infinity]));
     return { ...f, base, iva, irpf, total: r2(base + iva - irpf), coste: r2(f.creditos * c.coste), cliObj: cli, st, bajoCoste: minP < c.coste, sepa: cli ? sepaReady(cli) : { ok: false, why: 'Sin ficha de cliente' } };
@@ -510,6 +511,7 @@ async function importMovs(r, origen){
 function banner(){
   let h = '';
   if (S.mode === 'local') h += `<div class="banner"><b>Modo demostración.</b> Los datos son de ejemplo y se guardan solo en este navegador.</div>`;
+  if (S.mode === 'db' && S.view !== 'ajustes' && !cfg().nif) h += `<div class="banner"><b>Bienvenido.</b> Antes de empezar, completa tu ficha de distribuidor: datos fiscales, retención IRPF, IBAN y precios. <button class="btn sm" data-nav="ajustes" style="margin-left:8px">Completar ficha</button></div>`;
   if (S.slow) h += `<div class="banner"><b>Aún no se pueden leer tus datos.</b> Lo que ves puede estar desactualizado.</div>`;
   if (S.err) h += `<div class="banner"><b>Se perdió la conexión con tus datos.</b> Recarga la página.</div>`;
   return h;
@@ -523,7 +525,7 @@ function viewResumen(){
   const dev = []; for (const r of remesas()) for (const i of r.items) if (i.estado === 'devuelta') dev.push(i);
   const hist = s.historico;
   const tasks = [];
-  if (!c.nif || !c.iban) tasks.push(['var(--bad)', 'Completa tus datos de acreedor', 'Nombre, NIF, IBAN e identificador SEPA, en Ajustes.', 'ajustes', 'Ir']);
+  if (!c.nombre || !c.nif || !c.iban) tasks.push(['var(--bad)', 'Completa tu ficha de distribuidor', 'Datos fiscales, retención, IBAN y precios, en «Mi ficha».', 'ajustes', 'Ir']);
   if (sinCli.length) tasks.push(['var(--bad)', `${sinCli.length} recarga${sinCli.length > 1 ? 's' : ''} sin cliente`, 'Asígnalas en Movimientos para poder facturarlas.', 'movs', 'Asignar']);
   if (bajo.length) tasks.push(['var(--bad)', `${bajo.length} cliente${bajo.length > 1 ? 's' : ''} con precio por debajo de tu coste`, bajo.map(f => f.nombre).slice(0, 3).join(', '), 'cierre', 'Ver']);
   if (porEmitir.length) tasks.push(['var(--warn)', `${porEmitir.length} factura${porEmitir.length > 1 ? 's' : ''} por emitir`, `${money(porEmitir.reduce((a, f) => a + f.total, 0))} con IVA. Emítelas en tu programa de facturación y márcalas.`, 'cierre', 'Abrir']);
@@ -672,6 +674,7 @@ function viewClientes(){
       <label class="field"><span>C. postal</span><input id="c-cp" data-c="cp" value="${esc(e.cp)}"></label>
       <label class="field"><span>Población</span><input id="c-pob" data-c="poblacion" value="${esc(e.poblacion)}"></label>
       <label class="field"><span>Forma de pago</span><select id="c-fp" data-c="formaPago">${['Recibo domiciliado', 'Transferencia Banco', 'Tarjeta de crédito'].map(o => `<option ${e.formaPago === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
+      <label class="field"><span>Tipo de cliente</span><select id="c-tc" data-c="tipoCliente"><option value="">Empresa o autónomo (con retención)</option><option value="particular" ${e.tipoCliente === 'particular' ? 'selected' : ''}>Particular (sin retención)</option></select></label>
       <label class="field"><span>Precio por crédito</span><input id="c-pr" data-c="precio" inputmode="decimal" value="${esc(e.precio ?? '')}" placeholder="${String(cfg().precio).replace('.', ',')} (general)"></label>
       <label class="field full"><span>IBAN</span><input id="c-iban" data-c="iban" value="${esc(ibanFmt(e.iban))}" placeholder="ES00 0000 0000 0000 0000 0000">${e.iban && !ibanOk(e.iban) ? '<small style="color:var(--bad)">IBAN no válido</small>' : ''}</label>
       <label class="field"><span>Referencia del mandato</span><input id="c-mr" data-c="mandatoRef" value="${esc(e.mandatoRef)}"></label>
@@ -683,55 +686,85 @@ function viewClientes(){
   return `<div class="head"><div><h2>Clientes</h2><p>${all.length} clientes · ${dom.length} pagan por recibo domiciliado</p></div><div class="row"><button class="btn" data-act="exp-cli">Exportar clientes</button></div></div>
   <div class="grid2"><div>
     <div class="filters"><input type="search" id="cli-q" placeholder="Buscar por nombre, CIF o código" value="${esc(S.q)}"></div>
-    ${all.length ? `<div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Pago</th><th class="r">Precio</th><th>SEPA</th></tr></thead><tbody>${cs.map(c => { const s = sepaReady(c); return `<tr class="click" data-cli="${esc(c.id)}" tabindex="0"><td><div class="cn">${esc(c.nombre)}${c.potencial ? '<span class="flag n">Potencial</span>' : ''}</div><div class="cs">${esc(c.cif)} · ${esc(c.poblacion || '')}</div></td><td class="cs">${esc(c.formaPago || '—')}</td><td class="r num">${c.precio !== '' && c.precio != null ? money(num(c.precio)) : '<span class="cs">general</span>'}</td><td>${s.ok ? chip('c-ok', 'Listo') : s.skip ? '<span class="cs">—</span>' : `<span class="flag warn">${esc(s.why)}</span>`}</td></tr>`; }).join('')}</tbody></table></div>`
+    ${all.length ? `<div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Pago</th><th class="r">Precio</th><th>SEPA</th></tr></thead><tbody>${cs.map(c => { const s = sepaReady(c); return `<tr class="click" data-cli="${esc(c.id)}" tabindex="0"><td><div class="cn">${esc(c.nombre)}${c.potencial ? '<span class="flag n">Potencial</span>' : ''}${c.tipoCliente === 'particular' ? '<span class="flag n">Particular</span>' : ''}</div><div class="cs">${esc(c.cif)} · ${esc(c.poblacion || '')}</div></td><td class="cs">${esc(c.formaPago || '—')}</td><td class="r num">${c.precio !== '' && c.precio != null ? money(num(c.precio)) : '<span class="cs">general</span>'}</td><td>${s.ok ? chip('c-ok', 'Listo') : s.skip ? '<span class="cs">—</span>' : `<span class="flag warn">${esc(s.why)}</span>`}</td></tr>`; }).join('')}</tbody></table></div>`
     : `<div class="empty"><h3>Sin clientes</h3><p>Importa tu fichero de clientes (Excel) o añádelos a mano.</p><div class="row"><button class="btn primary" data-act="import">Importar fichero</button></div></div>`}
   </div>${form}</div>`;
 }
 
 function viewAjustes(){
   const c = cfg(), v = k => esc(c[k] ?? ''), ics = c.ics || icsFrom(c.nif);
-  return `<div class="head"><div><h2>Ajustes</h2><p>Tus datos como acreedor SEPA, precios y la comisión.</p></div></div>
+  const f = (k, label, extra = '', cls = '', help = '') => `<label class="field ${cls}"><span>${label}</span><input id="a-${k}" data-a="${k}" value="${v(k)}" ${extra}>${help ? `<small>${help}</small>` : ''}</label>`;
+  const fn = (k, label, help = '', cls = '') => `<label class="field ${cls}"><span>${label}</span><input id="a-${k}" data-a="${k}" data-n="1" inputmode="decimal" value="${esc(String(c[k] ?? '').replace('.', ','))}">${help ? `<small>${help}</small>` : ''}</label>`;
+  const sel = (k, label, opts, help = '', num = false) => `<label class="field"><span>${label}</span><select id="a-${k}" data-a="${k}" ${num ? 'data-n="1"' : ''}>${opts.map(([val, t]) => `<option value="${val}" ${String(c[k] ?? '') === String(val) ? 'selected' : ''}>${t}</option>`).join('')}</select>${help ? `<small>${help}</small>` : ''}</label>`;
+  const irpfOps = [[0, '0 % (sin retención)'], [7, '7 % (inicio de actividad)'], [15, '15 % (profesional)'], [19, '19 %']];
+  return `<div class="head"><div><h2>Mi ficha de distribuidor</h2><p>Tus datos fiscales, tu imagen, tus precios y cómo facturas. Aparecen en facturas, remesas, presupuestos, encargos de tratamiento y acuerdos.</p></div></div>
   <form class="stack" id="aj-form">
-    <div class="panel"><h3>Mi empresa</h3><p class="sub">Tu marca y tus datos. Salen en presupuestos, encargos de tratamiento y documentos.</p><div class="fgrid">
-      <label class="field"><span>Nombre comercial</span><input data-a="marca" value="${v('marca')}" placeholder="Ej. Soluciones RRHH Sur"></label>
-      <label class="field"><span>Lema (opcional)</span><input data-a="lema" value="${v('lema')}" placeholder="Ej. Soluciones digitales para RRHH"></label>
-      <label class="field full"><span>Dirección fiscal</span><input data-a="direccion" value="${v('direccion')}"></label>
-      <label class="field"><span>Email</span><input data-a="email" type="email" value="${v('email')}"></label>
-      <label class="field"><span>Web</span><input data-a="web" value="${v('web')}"></label>
-      <div class="field full"><span>Logo (SVG, PNG o JPG, máx. 300 KB)</span><div class="row" style="align-items:center;gap:14px;flex-wrap:wrap">${c.logo ? `<img src="${c.logo}" alt="Logo" style="max-height:56px;max-width:220px;background:#fff;padding:6px;border-radius:8px;border:1px solid var(--line)">` : '<span class="note">Sin logo: se usa el nombre comercial.</span>'}<label class="btn ghost" style="cursor:pointer">Subir logo<input type="file" id="a-logo" accept="image/svg+xml,image/png,image/jpeg" hidden></label>${c.logo ? '<button type="button" class="btn ghost" data-act="logo-del">Quitar</button>' : ''}</div></div>
-    </div></div>
     <div class="grid2">
-      <div class="panel"><h3>Tus datos</h3><p class="sub">Aparecen en la remesa SEPA como acreedor.</p><div class="fgrid">
-        <label class="field full"><span>Nombre y apellidos</span><input id="a-nom" data-a="nombre" value="${v('nombre')}"></label>
-        <label class="field"><span>NIF</span><input id="a-nif" data-a="nif" value="${v('nif')}"></label>
-        <label class="field"><span>Identificador de acreedor SEPA</span><input id="a-ics" data-a="ics" value="${v('ics')}" placeholder="${esc(ics || 'ES00000…')}"><small>${ics ? 'Calculado: ' + esc(ics) + '. Confírmalo con tu banco.' : 'Se calcula desde tu NIF.'}</small></label>
+      <div class="panel"><h3>Datos fiscales</h3><p class="sub">Los de tus facturas.</p><div class="fgrid">
+        ${f('nombre', 'Razón social o nombre y apellidos', '', 'full')}
+        ${sel('tipo', 'Forma jurídica', [['autonomo', 'Autónomo'], ['sociedad', 'Sociedad'], ['otro', 'Otra']])}
+        ${f('nif', 'NIF / CIF')}
+        ${f('direccion', 'Dirección fiscal', '', 'full')}
+        ${f('cp', 'Código postal', 'inputmode="numeric"')}
+        ${f('poblacion', 'Población')}
+        ${f('provincia', 'Provincia')}
+      </div></div>
+      <div class="panel"><h3>Imagen y contacto</h3><p class="sub">Tu marca en los documentos. El teléfono es solo para tu ficha: no se imprime.</p><div class="fgrid">
+        ${f('marca', 'Nombre comercial', 'placeholder="Ej. Soluciones RRHH Sur"')}
+        ${f('lema', 'Lema (opcional)', 'placeholder="Ej. Distribuidor de Time Laboris"')}
+        ${f('email', 'Email', 'type="email"')}
+        ${f('web', 'Web')}
+        ${f('telefono', 'Teléfono (interno)')}
+        <div class="field full"><span>Logo (SVG, PNG o JPG, máx. 300 KB)</span><div class="row" style="align-items:center;gap:14px;flex-wrap:wrap">${c.logo ? `<img src="${c.logo}" alt="Logo" style="max-height:56px;max-width:220px;background:#fff;padding:6px;border-radius:8px;border:1px solid var(--line)">` : '<span class="note">Sin logo: se usa el nombre comercial.</span>'}<label class="btn ghost" style="cursor:pointer">Subir logo<input type="file" id="a-logo" accept="image/svg+xml,image/png,image/jpeg" hidden></label>${c.logo ? '<button type="button" class="btn ghost" data-act="logo-del">Quitar</button>' : ''}</div></div>
+      </div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>Facturación e impuestos</h3><p class="sub">Cómo calculas tus facturas. Confírmalo con tu asesoría.</p><div class="fgrid">
+        ${fn('iva', 'IVA %')}
+        ${sel('irpfVentas', 'Retención IRPF en tus facturas', irpfOps, 'Se aplica a clientes empresa o autónomo. A los particulares no: márcalo en su ficha de cliente.', true)}
+        ${sel('irpfComision', 'Retención IRPF en la factura de comisión', irpfOps, 'La factura mensual de comisiones a tu mayorista.', true)}
+        ${f('facturacionApp', 'Programa con el que facturas', 'placeholder="Ej. FacturaDirecta, Holded, Quipu…"')}
+        ${f('concepto', 'Concepto de los créditos en la factura', '', 'full')}
+        <label class="field"><span>Facturo yo desde</span><input id="a-desde" type="month" data-a="desde" value="${v('desde')}"></label>
+      </div></div>
+      <div class="panel"><h3>Cobros por recibo (SEPA)</h3><p class="sub">Apareces como acreedor en las remesas.</p><div class="fgrid">
         <label class="field full"><span>IBAN donde cobras</span><input id="a-iban" data-a="iban" value="${esc(ibanFmt(c.iban))}">${c.iban && !ibanOk(c.iban) ? '<small style="color:var(--bad)">IBAN no válido</small>' : ''}</label>
-        <label class="field"><span>BIC del banco (opcional)</span><input id="a-bic" data-a="bic" value="${v('bic')}"></label>
-        <label class="field"><span>Esquema</span><select id="a-esq" data-a="esquema"><option value="CORE" ${c.esquema !== 'B2B' ? 'selected' : ''}>CORE (el habitual)</option><option value="B2B" ${c.esquema === 'B2B' ? 'selected' : ''}>B2B (solo empresas, mandato B2B)</option></select></label>
-        <label class="field"><span>Tipo de adeudo</span><select id="a-seq" data-a="seq"><option value="RCUR" ${c.seq !== 'FRST' ? 'selected' : ''}>Recurrente (RCUR)</option><option value="FRST" ${c.seq === 'FRST' ? 'selected' : ''}>Primero (FRST)</option></select><small>Si tu banco pide FRST en el primer cobro de cada mandato, genera esa remesa con FRST.</small></label>
-      </div></div>
-      <div class="panel"><h3>Time Laboris</h3><p class="sub">Precios por crédito sin IVA.</p><div class="fgrid">
-        <label class="field"><span>Precio de venta</span><input id="a-pv" data-a="precio" data-n="1" value="${esc(String(c.precio).replace('.', ','))}"></label>
-        <label class="field"><span>Tu coste</span><input id="a-pc" data-a="coste" data-n="1" value="${esc(String(c.coste).replace('.', ','))}"></label>
-        <label class="field"><span>IVA %</span><input id="a-iva" data-a="iva" data-n="1" value="${esc(c.iva)}"></label>
-        <label class="field"><span>Retención IRPF en ventas %</span><input id="a-irv" data-a="irpfVentas" data-n="1" value="${esc(c.irpfVentas)}"><small>Normalmente 0 si revendes como distribuidor. Confírmalo con tu asesor.</small></label>
-        <label class="field full"><span>Concepto en la factura</span><input id="a-con" data-a="concepto" value="${v('concepto')}"></label>
-        <label class="field"><span>Facturo yo desde</span><input id="a-des" type="month" data-a="desde" value="${v('desde')}"></label>
-        <label class="field"><span>Saldo de créditos al empezar</span><input id="a-sal" data-a="saldoInicial" data-n="1" value="${esc(c.saldoInicial ?? 0)}"></label>
+        ${f('bic', 'BIC del banco (opcional)')}
+        <label class="field"><span>Identificador de acreedor SEPA</span><input id="a-ics" data-a="ics" value="${v('ics')}" placeholder="${esc(ics || 'ES00000…')}"><small>${ics ? 'Calculado: ' + esc(ics) + '. Confírmalo con tu banco.' : 'Se calcula desde tu NIF.'}</small></label>
+        <label class="field"><span>Esquema</span><select id="a-esq" data-a="esquema"><option value="CORE" ${c.esquema !== 'B2B' ? 'selected' : ''}>CORE (el habitual)</option><option value="B2B" ${c.esquema === 'B2B' ? 'selected' : ''}>B2B (solo empresas)</option></select></label>
+        <label class="field"><span>Tipo de adeudo</span><select id="a-seq" data-a="seq"><option value="RCUR" ${c.seq !== 'FRST' ? 'selected' : ''}>Recurrente (RCUR)</option><option value="FRST" ${c.seq === 'FRST' ? 'selected' : ''}>Primero (FRST)</option></select></label>
       </div></div>
     </div>
     <div class="grid2">
-      <div class="panel"><h3>Comisión de otras soluciones</h3><p class="sub">Factura mensual a Creative Quality.</p><div class="fgrid">
-        <label class="field"><span>Comisión %</span><input id="a-cp" data-a="comisionPct" data-n="1" value="${esc(c.comisionPct)}"></label>
-        <label class="field"><span>IVA %</span><input id="a-civ" data-a="ivaComision" data-n="1" value="${esc(c.ivaComision)}"></label>
-        <label class="field"><span>Retención IRPF %</span><input id="a-cir" data-a="irpfComision" data-n="1" value="${esc(c.irpfComision)}"></label>
-        <label class="field full"><span>Razón social de Creative Quality</span><input id="a-cqn" data-a="cqNombre" value="${v('cqNombre')}"></label>
-        <label class="field"><span>CIF</span><input id="a-cqc" data-a="cqCif" value="${v('cqCif')}"></label>
+      <div class="panel"><h3>Time Laboris</h3><p class="sub">Precios por crédito sin IVA. Tu coste por tramos está en «Escala de compra».</p><div class="fgrid">
+        ${f('tlCodigo', 'Tu código de distribuidor')}
+        ${fn('precio', 'Precio de venta general')}
+        ${fn('coste', 'Tu coste actual')}
+        ${fn('saldoInicial', 'Saldo de créditos al empezar')}
+        ${fn('demoDia', 'Día del mes en que la demo pasa al mes siguiente', 'Si el alta es antes de ese día, la demo dura hasta fin de mes; si es ese día o después, hasta fin del mes siguiente.')}
       </div></div>
-      <div class="panel"><h3>Copia de seguridad</h3><p class="sub">Todos tus clientes, movimientos, cierres y remesas en un archivo.</p><div class="row"><button type="button" class="btn" data-act="backup">Descargar copia</button><label class="btn" for="bk-in">Restaurar copia…</label><input type="file" id="bk-in" accept=".json" hidden></div>
-        <p class="note" style="margin-top:14px">Los datos se guardan en tu cuenta y solo los ves tú.</p></div>
+      <div class="panel"><h3>Mayorista y comisiones</h3><p class="sub">Comisión por otras soluciones y la que pagas a asesorías.</p><div class="fgrid">
+        ${f('cqNombre', 'Razón social del mayorista', '', 'full')}
+        ${f('cqCif', 'CIF del mayorista')}
+        ${fn('comisionPct', 'Comisión que cobras %')}
+        ${fn('ivaComision', 'IVA de la comisión %')}
+        ${fn('asePct', 'Comisión a asesorías por defecto %')}
+      </div></div>
     </div>
-    <div class="row" style="justify-content:flex-end"><button class="btn primary">Guardar ajustes</button></div>
+    <div class="grid2">
+      <div class="panel"><h3>Certificados digitales</h3><p class="sub">Precio de venta con IVA y tu coste sin IVA.</p><div class="fgrid">
+        ${fn('certPvpCiu', 'Ciudadano: precio con IVA')}
+        ${fn('certCosteCiu', 'Ciudadano: tu coste')}
+        ${fn('certPvpJur', 'Jurídica: precio con IVA')}
+        ${fn('certCosteJur', 'Jurídica: tu coste')}
+      </div></div>
+      <div class="panel"><h3>Presupuestos y encargo de tratamiento</h3><p class="sub">Textos que salen en tus presupuestos.</p><div class="fgrid">
+        <label class="field full"><span>Soporte que ofreces</span><textarea id="a-soporte" data-a="soporte" rows="2" placeholder="Por correo y videollamada, de lunes a viernes de 9:00 a 14:00.">${v('soporte')}</textarea></label>
+        <label class="field full"><span>Otros subencargados (correo y documentos)</span><textarea id="a-sub" data-a="subencargados" rows="2" placeholder="Microsoft Ireland Operations Ltd., para el correo electrónico y el almacenamiento de documentos, con datos en la Unión Europea.">${v('subencargados')}</textarea><small>Creative Quality, titular de Time Laboris, se incluye siempre.</small></label>
+      </div></div>
+    </div>
+    <div class="panel"><h3>Copia de seguridad</h3><p class="sub">Todos tus clientes, movimientos, cierres, remesas y presupuestos en un archivo. Descárgala cada mes al cerrar.</p><div class="row"><button type="button" class="btn" data-act="backup">Descargar copia</button><label class="btn" for="bk-in">Restaurar copia…</label><input type="file" id="bk-in" accept=".json" hidden></div></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn primary">Guardar ficha</button></div>
   </form>`;
 }
 
@@ -801,7 +834,7 @@ function xlsxBlob(rows, sheet){ const ws = XLSX.utils.aoa_to_sheet(rows); ws['!c
 function exportFC(){
   const m = S.mes, c = cfg(), fs = facturasMes(m).filter(f => f.cli);
   const rows = [['Nº factura', 'Fecha', 'Código cliente', 'Razón social', 'CIF', 'Dirección', 'C. postal', 'Población', 'Provincia', 'Email', 'Forma de pago', 'IBAN', 'Concepto', 'Cantidad', 'Precio', '% IVA', '% IRPF', 'Base', 'Cuota IVA', 'Total factura']];
-  for (const f of fs) { const k = f.cliObj; f.lineas.forEach((l, i) => rows.push([f.st.num || '', fdate(f.st.fecha || (lastDay(m) < today() ? lastDay(m) : today())), k.codigo || '', k.nombre, k.cif, k.direccion || '', k.cp || '', k.poblacion || '', k.provincia || '', k.email || '', k.formaPago || '', ibanClean(k.iban), l.extra ? l.concepto : `${c.concepto} ${mesLabel(m)}`, l.cantidad, l.precio, c.iva, c.irpfVentas, r2(l.cantidad * l.precio), r2(l.cantidad * l.precio * c.iva / 100), i === 0 ? f.total : ''])); }
+  for (const f of fs) { const k = f.cliObj; f.lineas.forEach((l, i) => rows.push([f.st.num || '', fdate(f.st.fecha || (lastDay(m) < today() ? lastDay(m) : today())), k.codigo || '', k.nombre, k.cif, k.direccion || '', k.cp || '', k.poblacion || '', k.provincia || '', k.email || '', k.formaPago || '', ibanClean(k.iban), l.extra ? l.concepto : `${c.concepto} ${mesLabel(m)}`, l.cantidad, l.precio, c.iva, irpfCli(k), r2(l.cantidad * l.precio), r2(l.cantidad * l.precio * c.iva / 100), i === 0 ? f.total : ''])); }
   const com = comisionMes(m); if (com.base) rows.push(['', fdate(lastDay(m)), '', c.cqNombre || 'Creative Quality', c.cqCif || '', '', '', '', '', '', 'Transferencia', '', `Comisión ${c.comisionPct} % ventas ${mesLabel(m)}`, 1, com.base, c.ivaComision, c.irpfComision, com.base, com.iva, com.total]);
   saveFile(`Facturas ${mesLabel(m)}.xlsx`, xlsxBlob(rows, 'Facturas'));
 }
@@ -1251,7 +1284,7 @@ function acuForm(a){
     ${f('domicilio', 'Domicilio', dom, 'full')}
     ${f('rep', 'Representante (nombre y apellidos)', a && a.representante)}
     ${f('dni', 'DNI del representante', a && a.dniRep)}
-    <label class="field"><span>Comisión</span>${pctSelect('pct', ac.pct ?? (a && a.pct) ?? 20)}</label>
+    <label class="field"><span>Comisión</span>${pctSelect('pct', ac.pct ?? (a && a.pct) ?? (num(cfg().asePct) || 20))}</label>
     ${f('minimo', 'Facturación mínima al semestre (€)', ac.minimo ?? 500, '', 'inputmode="decimal"')}
     ${f('minEmp', 'Empresas para tenerlo gratis', ac.minEmp ?? 2, '', 'inputmode="numeric"')}
     ${f('lugar', 'Lugar de firma', ac.lugar || 'Sevilla')}
@@ -1294,7 +1327,7 @@ function aseModal(a){
     ${f('dniRep', 'DNI del representante', a && a.dniRep)}
     ${f('email', 'Correo', a && a.email)}
     ${f('telefono', 'Teléfono', a && a.telefono)}
-    <label class="field"><span>Comisión</span>${pctSelect('pct', a ? a.pct : 20)}</label>
+    <label class="field"><span>Comisión</span>${pctSelect('pct', a ? a.pct : (num(cfg().asePct) || 20))}</label>
     ${f('web', 'Web', a && a.web, 'full', 'placeholder="https://"')}
     ${logoField(a)}
   </div>`;
@@ -1391,7 +1424,9 @@ const preCat = () => { const d = S.docs.get('catalogo'); return d && d.items && 
 const PRE_ESTADOS = { borrador: ['c-neutral', 'Borrador'], enviado: ['c-info', 'Enviado'], aceptado: ['c-ok', 'Aceptado'], rechazado: ['c-bad', 'Rechazado'] };
 const PRE = { filtro: '' };
 const presupuestos = () => [...S.docs.values()].filter(d => d.kind === 'presupuesto').sort((a, b) => (b.num || '').localeCompare(a.num || ''));
-function preTotales(p){ const base = r2((p.lineas || []).reduce((s, l) => s + num(l.cant) * num(l.precio), 0)), iva = r2(base * num(p.iva ?? 21) / 100); return { base, iva, total: r2(base + iva) }; }
+function preIrpf(p){ if (p.irpf !== '' && p.irpf != null) return num(p.irpf); if (p.anonimo) return num(cfg().irpfVentas); return irpfCli(p.cli ? cliById(p.cli) : { tipoCliente: p.cliente && p.cliente.tipoCliente }); }
+function preTotales(p){ const base = r2((p.lineas || []).reduce((s, l) => s + num(l.cant) * num(l.precio), 0)), iva = r2(base * num(p.iva ?? 21) / 100), pi = preIrpf(p), irpf = r2(base * pi / 100); return { base, iva, pi, irpf, total: r2(base + iva - irpf) }; }
+const demoDia = () => Math.min(28, Math.max(2, Math.round(num(cfg().demoDia) || 15)));
 function preNuevoNum(fecha){ const y = (fecha || today()).slice(0, 4); const n = presupuestos().filter(p => (p.num || '').startsWith('P-' + y + '-')).map(p => +p.num.split('-')[2] || 0); return 'P-' + y + '-' + String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0'); }
 function preCliente(p){ const c = p.cli ? cliById(p.cli) : null; return c ? { nombre: c.nombre, cif: c.cif, direccion: [c.direccion, [c.cp, c.poblacion].filter(Boolean).join(' ')].filter(Boolean).join(', '), email: c.email || '', contacto: p.cliente?.contacto || c.contacto || '' } : (p.cliente || {}); }
 function preVacio(){ return { kind: 'presupuesto', num: '', fecha: today(), validez: 30, cli: '', cliente: { nombre: '', cif: '', direccion: '', email: '', contacto: '' }, titulo: '', intro: '', lineas: [{ concepto: '', desc: '', cant: 1, precio: '' }], iva: 21, formaPago: 'Recibo domiciliado SEPA', plazo: '', notas: '', estado: 'borrador', encargo: true }; }
@@ -1434,6 +1469,7 @@ function preEditor(p){
         <label class="field"><span>Validez (días)</span><input data-p="validez" data-n="1" inputmode="numeric" value="${esc(p.validez)}"></label>
         <label class="field"><span>Estado</span><select data-p="estado">${Object.entries(PRE_ESTADOS).map(([k, v]) => `<option value="${k}" ${p.estado === k ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></label>
         <label class="field"><span>IVA %</span><input data-p="iva" data-n="1" value="${esc(p.iva)}"></label>
+        <label class="field"><span>Retención IRPF %</span><input data-p="irpf" inputmode="decimal" value="${esc(p.irpf ?? '')}" placeholder="${preIrpf({ ...p, irpf: '' })} (según cliente)"></label>
         <label class="field full"><span>Asesoría que lo trae (opcional)</span><select data-p="asesoria"><option value="">Ninguna</option>${asesorias().map(a => `<option value="${esc(a.codigo)}" ${p.asesoria === a.codigo ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</select></label>
         <label class="field full"><span>Asunto</span><input data-p="titulo" value="${esc(p.titulo)}" placeholder="Registro de jornada con Time Laboris"></label>
         <label class="field full"><span>Introducción</span><textarea data-p="intro" rows="3" placeholder="Qué necesita el cliente y qué le propones.">${esc(p.intro)}</textarea></label>
@@ -1472,7 +1508,7 @@ ACTS['cat-add'] = () => { catLeer(); PRE.catItems.push({ concepto: '', desc: '',
 ACTS['cat-del'] = el => { catLeer(); PRE.catItems.splice(+el.dataset.i, 1); S.dirty = false; render(); };
 ACTS['cat-save'] = async () => { catLeer(); const items = PRE.catItems.filter(x => (x.concepto || '').trim()); S.dirty = false; if (await safe(() => Store.put('catalogo', { kind: 'catalogo', items }), 'Catálogo guardado')) { PRE.cat = false; PRE.catItems = null; render(); } };
 document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#cat-form')) S.dirty = true; });
-function preTotHTML(p, t){ return `<div><span>Base imponible</span><span class="num">${money(t.base)}</span></div><div><span>IVA ${num(p.iva)} %</span><span class="num">${money(t.iva)}</span></div><div class="big"><span>Total</span><span class="num">${money(t.total)}</span></div>`; }
+function preTotHTML(p, t){ return `<div><span>Base imponible</span><span class="num">${money(t.base)}</span></div><div><span>IVA ${num(p.iva)} %</span><span class="num">${money(t.iva)}</span></div>${t.irpf ? `<div><span>Retención IRPF ${t.pi} %</span><span class="num">${money(-t.irpf)}</span></div>` : ''}<div class="big"><span>Total</span><span class="num">${money(t.total)}</span></div>`; }
 /* --- calculadora de créditos (tarifa oficial de timelaboris.es/precio) --- */
 const esCred = l => /cr[eé]ditos/i.test((l && l.concepto) || '');
 function creditosTrab(n){ n = Math.max(0, Math.round(num(n))); if (!n) return 0; if (n <= 5) return 5; let c = Math.min(n, 15); if (n > 15) c += Math.floor(((Math.min(n, 100) - 15) * 50 + 50) / 100); if (n > 100) c += Math.floor(((n - 100) * 45 + 50) / 100); return c; }
@@ -1497,11 +1533,11 @@ function preLeer(){
 }
 const PRE_COND = p => [
   ['Validez', `${num(p.validez) || 30} días desde la fecha del presupuesto.`],
-  ['Demo gratuita', 'Si el alta se hace antes del día 15, la prueba dura hasta el último día de ese mes; a partir del día 15, hasta el último día del mes siguiente.'],
+  ['Demo gratuita', `Si el alta se hace antes del día ${demoDia()}, la prueba dura hasta el último día de ese mes; a partir del día ${demoDia()}, hasta el último día del mes siguiente.`],
   ['Forma de pago', p.formaPago + '.'],
   ['Facturación', 'Factura electrónica emitida por ' + ID().marca + ' y enviada por correo.'],
   ...(p.plazo ? [['Puesta en marcha', p.plazo + ' desde la aceptación.']] : []),
-  ['Soporte', 'Por correo y videollamada desde la agenda online, de lunes a viernes de 9:00 a 13:30.'],
+  ['Soporte', cfg().soporte || 'Por correo y videollamada, en horario laboral.'],
   ['Protección de datos', 'Los datos de los trabajadores se tratan solo para prestar el servicio, como encargado del tratamiento (art. 28 RGPD).']
 ];
 function preDocHTML(p){
@@ -1563,7 +1599,7 @@ h3{font-size:10pt;letter-spacing:.1em;text-transform:uppercase;color:#2F5288;mar
   <table><thead><tr><th>Concepto</th><th class="r">Cantidad</th><th class="r">Precio</th><th class="r">Importe</th></tr></thead><tbody>
   ${(p.lineas || []).filter(l => l.concepto || l.desc).map(l => `<tr><td><b>${esc(l.concepto)}</b>${l.desc ? `<div class="d">${esc(l.desc)}</div>` : ''}</td><td class="r">${esc(String(num(l.cant)).replace('.', ','))}</td><td class="r">${m(num(l.precio))}</td><td class="r">${m(num(l.cant) * num(l.precio))}</td></tr>`).join('')}
   </tbody></table>
-  <div class="tot"><table><tr><td>Base imponible</td><td class="r">${m(t.base)}</td></tr><tr><td>IVA ${num(p.iva)} %</td><td class="r">${m(t.iva)}</td></tr><tr class="g"><td>Total</td><td class="r">${m(t.total)}</td></tr></table></div>
+  <div class="tot"><table><tr><td>Base imponible</td><td class="r">${m(t.base)}</td></tr><tr><td>IVA ${num(p.iva)} %</td><td class="r">${m(t.iva)}</td></tr>${t.irpf ? `<tr><td>Retención IRPF ${t.pi} %</td><td class="r">${m(-t.irpf)}</td></tr>` : ''}<tr class="g"><td>Total</td><td class="r">${m(t.total)}</td></tr></table></div>
   <h3>Condiciones</h3><div class="cond">${PRE_COND(p).map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join('')}</div>
   ${p.notas ? `<div class="notas">${esc(p.notas)}</div>` : ''}
   <h3>Aceptación</h3><div style="font-size:9.3pt">Para aceptarlo, firma este presupuesto${p.encargo !== false ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${esc(ID().email || 'nuestro correo')}.</div>
@@ -1575,9 +1611,9 @@ function encClausulas(p, bio, e){
   const cl_ = [
     ['Primera. Objeto', `El ENCARGADO tratará por cuenta del RESPONSABLE los datos personales necesarios para: (a) preparar y mostrar una demostración gratuita de Time Laboris con los datos de la empresa y de su plantilla, a partir del Informe de Trabajadores en Alta (ITA) y la información que el RESPONSABLE le facilite; y (b) si el RESPONSABLE contrata el servicio, implantar y prestar el registro de jornada, el portal del empleado y el soporte asociado, según el presupuesto ${e(p.num || '')}.`],
     ['Segunda. Datos y personas afectadas', `Personas afectadas: trabajadores del RESPONSABLE y, en su caso, sus responsables o encargados. Datos: identificativos y de contacto (nombre, apellidos, DNI/NIE, número de afiliación a la Seguridad Social, correo y teléfono), datos laborales (centro, puesto, fecha de alta, tipo de contrato y jornada) y registros de jornada (horas de entrada y salida, pausas y, si el RESPONSABLE lo activa, ubicación en el momento del fichaje).${bio ? ' Si el RESPONSABLE utiliza lectores de huella o reconocimiento facial, se tratarán además plantillas biométricas, que son categorías especiales de datos: el RESPONSABLE deberá valorar su necesidad y ofrecer un sistema alternativo (tarjeta o aplicación), y el ENCARGADO solo las tratará para el fichaje.' : ''}`],
-    ['Tercera. Duración', 'Para la demostración, lo que dure la prueba gratuita de Time Laboris: si la empresa se da de alta antes del día 15, hasta el último día de ese mes; si se da de alta a partir del día 15, hasta el último día del mes siguiente. Si no contrata, el ENCARGADO suprimirá los datos en un plazo de 30 días desde el fin de la prueba. Si contrata, el encargo dura lo mismo que la prestación del servicio.'],
+    ['Tercera. Duración', `Para la demostración, lo que dure la prueba gratuita de Time Laboris: si la empresa se da de alta antes del día ${demoDia()}, hasta el último día de ese mes; si se da de alta a partir del día ${demoDia()}, hasta el último día del mes siguiente. Si no contrata, el ENCARGADO suprimirá los datos en un plazo de 30 días desde el fin de la prueba. Si contrata, el encargo dura lo mismo que la prestación del servicio.`],
     ['Cuarta. Obligaciones del ENCARGADO', 'Tratar los datos solo para la finalidad indicada y siguiendo las instrucciones documentadas del RESPONSABLE; garantizar la confidencialidad de quienes acceden a ellos; aplicar las medidas de seguridad del artículo 32 del RGPD (acceso con usuario y contraseña, cifrado en tránsito, copias de seguridad y control de accesos); ayudar al RESPONSABLE a atender los derechos de los interesados y a cumplir sus obligaciones de seguridad y evaluación de impacto; notificarle sin dilación indebida, y en todo caso en 48 horas, cualquier brecha de seguridad de la que tenga conocimiento; y poner a su disposición la información necesaria para demostrar el cumplimiento de este contrato.'],
-    ['Quinta. Subencargados', 'El RESPONSABLE autoriza a recurrir a: Creative Quality S.L. (CIF B18799353), titular de la plataforma Time Laboris, para el alojamiento y funcionamiento de la aplicación; y Microsoft Ireland Operations Ltd., para el correo electrónico y el almacenamiento de documentos, con datos en la Unión Europea. El ENCARGADO les impondrá por contrato las mismas obligaciones de este documento y avisará al RESPONSABLE de cualquier cambio, que podrá oponerse.'],
+    ['Quinta. Subencargados', `El RESPONSABLE autoriza a recurrir a: Creative Quality S.L. (CIF B18799353), titular de la plataforma Time Laboris, para el alojamiento y funcionamiento de la aplicación${cfg().subencargados ? '; y ' + cfg().subencargados.trim().replace(/\.$/, '') : ''}. El ENCARGADO les impondrá por contrato las mismas obligaciones de este documento y avisará al RESPONSABLE de cualquier cambio, que podrá oponerse.`],
     ['Sexta. Transferencias internacionales', 'No se realizarán transferencias de datos fuera del Espacio Económico Europeo sin autorización previa y por escrito del RESPONSABLE y sin las garantías del capítulo V del RGPD.'],
     ['Séptima. Obligaciones del RESPONSABLE', 'Facilitar al ENCARGADO solo los datos necesarios, informar a sus trabajadores del tratamiento y de la finalidad del registro de jornada, contar con una base jurídica válida (el artículo 34.9 del Estatuto de los Trabajadores obliga a registrar la jornada) y supervisar el tratamiento.'],
     ['Octava. Fin del encargo', 'Al terminar, el ENCARGADO devolverá al RESPONSABLE o suprimirá, según este elija, todos los datos personales y las copias, salvo los que deba conservar por obligación legal, debidamente bloqueados. El RESPONSABLE podrá descargar antes sus registros de jornada, que debe conservar durante cuatro años.']
@@ -1620,6 +1656,7 @@ function preDocDef(p){
   const tot = { columns: [{ width: '*', text: '' }, { width: 200, table: { widths: ['*', 'auto'], body: [
       [{ text: 'Base imponible', margin: [6, 2, 0, 2] }, { text: m(t.base), alignment: 'right', margin: [0, 2, 6, 2] }],
       [{ text: `IVA ${num(p.iva)} %`, margin: [6, 2, 0, 2] }, { text: m(t.iva), alignment: 'right', margin: [0, 2, 6, 2] }],
+      ...(t.irpf ? [[{ text: `Retención IRPF ${t.pi} %`, margin: [6, 2, 0, 2] }, { text: m(-t.irpf), alignment: 'right', margin: [0, 2, 6, 2] }]] : []),
       [{ text: 'Total', bold: true, color: '#fff', fillColor: B, fontSize: 11.5, margin: [6, 5, 0, 5] }, { text: m(t.total), bold: true, color: '#fff', fillColor: B, fontSize: 11.5, alignment: 'right', margin: [0, 5, 6, 5] }]] }, layout: 'noBorders' }], margin: [0, 8, 0, 0], fontSize: 9.5 };
   const sign = labels => ({ table: { widths: labels.map(l => l[1]), heights: [55], body: [labels.map(l => ({ text: l[0], fontSize: 7.5, color: MU, margin: [4, 3, 4, 3] }))] }, layout: { hLineColor: () => LN, vLineColor: () => LN, hLineWidth: () => .8, vLineWidth: () => .8 } });
   const content = [
@@ -1969,7 +2006,7 @@ function startCloud(session){
 }
 function startDemo(){
   DEMO = true; $('#auth').hidden = true; S.mode = 'local'; loadLocal();
-  if (!S.docs.size) { S.docs = new Map(demoSeed().map(d => [d.id, d])); saveLocal(); }
+  if (!S.docs.has('demo_v2')) { S.docs = new Map([...demoSeed(), { id: 'demo_v2', kind: 'meta' }].map(d => [d.id, d])); saveLocal(); }
   const ms = [...S.docs.values()].filter(d => d.kind === 'mov').map(d => d.mes).sort(); if (ms.length && !S.docs.has('mov_' + S.mes)) S.mes = ms[ms.length - 1];
   render(); paintWho();
 }
@@ -1985,7 +2022,7 @@ function demoSeed(){
     ['cli_D005', 'Asesoría Triana Gestión, S.L.', 'B99000055', 3, 'Transferencia', 60],
     ['cli_D006', 'Limpiezas Brillo Andaluz, S.L.', 'B99000066', 2.9, 'Recibo domiciliado', 310]
   ];
-  const docs = [{ id: 'ajustes', kind: 'ajustes', nombre: 'Distribuciones Ejemplo, S.L.', marca: 'Ejemplo RRHH', lema: 'Distribuidor de Time Laboris', nif: 'B99999990', direccion: 'Calle Ejemplo, 1 · 41001 Sevilla', email: 'hola@ejemplo-rrhh.es', web: 'ejemplo-rrhh.es', iban, precio: 3, coste: 1.5, iva: 21, irpfVentas: 0, comisionPct: 20, ivaComision: 21, irpfComision: 0, concepto: 'Créditos Time Laboris', desde: '2026-07', seq: 'RCUR', esquema: 'CORE', saldoInicial: 500, cqNombre: 'Creative Quality S.L.', cqCif: 'B18799353', certPvpCiu: 60, certPvpJur: 96, certCosteCiu: 35, certCosteJur: 65 }];
+  const docs = [{ id: 'ajustes', kind: 'ajustes', nombre: 'Distribuciones Ejemplo, S.L.', marca: 'Ejemplo RRHH', lema: 'Distribuidor de Time Laboris', nif: 'B99999990', tipo: 'sociedad', direccion: 'Calle Ejemplo, 1', cp: '41001', poblacion: 'Sevilla', provincia: 'Sevilla', tlCodigo: 'D-0000', facturacionApp: 'su programa de facturación', demoDia: 21, asePct: 20, soporte: 'Por correo y videollamada, de lunes a viernes de 9:00 a 14:00.', email: 'hola@ejemplo-rrhh.es', web: 'ejemplo-rrhh.es', iban, precio: 3, coste: 1.5, iva: 21, irpfVentas: 0, comisionPct: 20, ivaComision: 21, irpfComision: 0, concepto: 'Créditos Time Laboris', desde: '2026-07', seq: 'RCUR', esquema: 'CORE', saldoInicial: 500, cqNombre: 'Creative Quality S.L.', cqCif: 'B18799353', certPvpCiu: 60, certPvpJur: 96, certCosteCiu: 35, certCosteJur: 65 }];
   cli.forEach(([id, nombre, cif, precio, formaPago], i) => docs.push({ id, kind: 'cliente', codigo: id.slice(4), nombre, cif, precio, formaPago, iban: formaPago.startsWith('Recibo') ? iban : '', mandatoRef: 'TL-' + id.slice(4), mandatoFecha: '2026-07-01', alias: [], email: 'administracion@' + nombre.split(' ')[0].toLowerCase().normalize('NFD').replace(/[^a-z]/g, '') + '.example', direccion: 'Sevilla' }));
   ['2026-08', '2026-09', '2026-10', '2026-11'].forEach((m, k) => {
     const rec = cli.map(([id, nombre, cif, , , base], i) => ({ id: `d${m}-${i}`, fecha: `${m}-0${(i % 8) + 1}`, nombre, cif, creditos: Math.round(base * (1 + 0.06 * k) / 10) * 10, tipo: 'creditos', ref: '', cli: id, origen: 'yo' }));
