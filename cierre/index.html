@@ -1424,8 +1424,7 @@ const preCat = () => { const d = S.docs.get('catalogo'); return d && d.items && 
 const PRE_ESTADOS = { borrador: ['c-neutral', 'Borrador'], enviado: ['c-info', 'Enviado'], aceptado: ['c-ok', 'Aceptado'], rechazado: ['c-bad', 'Rechazado'] };
 const PRE = { filtro: '' };
 const presupuestos = () => [...S.docs.values()].filter(d => d.kind === 'presupuesto').sort((a, b) => (b.num || '').localeCompare(a.num || ''));
-function preIrpf(p){ if (p.irpf !== '' && p.irpf != null) return num(p.irpf); if (p.anonimo) return num(cfg().irpfVentas); return irpfCli(p.cli ? cliById(p.cli) : { tipoCliente: p.cliente && p.cliente.tipoCliente }); }
-function preTotales(p){ const base = r2((p.lineas || []).reduce((s, l) => s + num(l.cant) * num(l.precio), 0)), iva = r2(base * num(p.iva ?? 21) / 100), pi = preIrpf(p), irpf = r2(base * pi / 100); return { base, iva, pi, irpf, total: r2(base + iva - irpf) }; }
+function preTotales(p){ const base = r2((p.lineas || []).reduce((s, l) => s + num(l.cant) * num(l.precio), 0)), iva = r2(base * num(p.iva ?? 21) / 100); return { base, iva, total: r2(base + iva) }; }
 const demoDia = () => Math.min(28, Math.max(2, Math.round(num(cfg().demoDia) || 15)));
 function preNuevoNum(fecha){ const y = (fecha || today()).slice(0, 4); const n = presupuestos().filter(p => (p.num || '').startsWith('P-' + y + '-')).map(p => +p.num.split('-')[2] || 0); return 'P-' + y + '-' + String((n.length ? Math.max(...n) : 0) + 1).padStart(3, '0'); }
 function preCliente(p){ const c = p.cli ? cliById(p.cli) : null; return c ? { nombre: c.nombre, cif: c.cif, direccion: [c.direccion, [c.cp, c.poblacion].filter(Boolean).join(' ')].filter(Boolean).join(', '), email: c.email || '', contacto: p.cliente?.contacto || c.contacto || '' } : (p.cliente || {}); }
@@ -1469,7 +1468,6 @@ function preEditor(p){
         <label class="field"><span>Validez (días)</span><input data-p="validez" data-n="1" inputmode="numeric" value="${esc(p.validez)}"></label>
         <label class="field"><span>Estado</span><select data-p="estado">${Object.entries(PRE_ESTADOS).map(([k, v]) => `<option value="${k}" ${p.estado === k ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></label>
         <label class="field"><span>IVA %</span><input data-p="iva" data-n="1" value="${esc(p.iva)}"></label>
-        <label class="field"><span>Retención IRPF %</span><input data-p="irpf" inputmode="decimal" value="${esc(p.irpf ?? '')}" placeholder="${preIrpf({ ...p, irpf: '' })} (según cliente)"></label>
         <label class="field full"><span>Asesoría que lo trae (opcional)</span><select data-p="asesoria"><option value="">Ninguna</option>${asesorias().map(a => `<option value="${esc(a.codigo)}" ${p.asesoria === a.codigo ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</select></label>
         <label class="field full"><span>Asunto</span><input data-p="titulo" value="${esc(p.titulo)}" placeholder="Registro de jornada con Time Laboris"></label>
         <label class="field full"><span>Introducción</span><textarea data-p="intro" rows="3" placeholder="Qué necesita el cliente y qué le propones.">${esc(p.intro)}</textarea></label>
@@ -1508,7 +1506,7 @@ ACTS['cat-add'] = () => { catLeer(); PRE.catItems.push({ concepto: '', desc: '',
 ACTS['cat-del'] = el => { catLeer(); PRE.catItems.splice(+el.dataset.i, 1); S.dirty = false; render(); };
 ACTS['cat-save'] = async () => { catLeer(); const items = PRE.catItems.filter(x => (x.concepto || '').trim()); S.dirty = false; if (await safe(() => Store.put('catalogo', { kind: 'catalogo', items }), 'Catálogo guardado')) { PRE.cat = false; PRE.catItems = null; render(); } };
 document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#cat-form')) S.dirty = true; });
-function preTotHTML(p, t){ return `<div><span>Base imponible</span><span class="num">${money(t.base)}</span></div><div><span>IVA ${num(p.iva)} %</span><span class="num">${money(t.iva)}</span></div>${t.irpf ? `<div><span>Retención IRPF ${t.pi} %</span><span class="num">${money(-t.irpf)}</span></div>` : ''}<div class="big"><span>Total</span><span class="num">${money(t.total)}</span></div>`; }
+function preTotHTML(p, t){ return `<div><span>Base imponible</span><span class="num">${money(t.base)}</span></div><div><span>IVA ${num(p.iva)} %</span><span class="num">${money(t.iva)}</span></div><div class="big"><span>Total</span><span class="num">${money(t.total)}</span></div>`; }
 /* --- calculadora de créditos (tarifa oficial de timelaboris.es/precio) --- */
 const esCred = l => /cr[eé]ditos/i.test((l && l.concepto) || '');
 function creditosTrab(n){ n = Math.max(0, Math.round(num(n))); if (!n) return 0; if (n <= 5) return 5; let c = Math.min(n, 15); if (n > 15) c += Math.floor(((Math.min(n, 100) - 15) * 50 + 50) / 100); if (n > 100) c += Math.floor(((n - 100) * 45 + 50) / 100); return c; }
@@ -1599,7 +1597,7 @@ h3{font-size:10pt;letter-spacing:.1em;text-transform:uppercase;color:#2F5288;mar
   <table><thead><tr><th>Concepto</th><th class="r">Cantidad</th><th class="r">Precio</th><th class="r">Importe</th></tr></thead><tbody>
   ${(p.lineas || []).filter(l => l.concepto || l.desc).map(l => `<tr><td><b>${esc(l.concepto)}</b>${l.desc ? `<div class="d">${esc(l.desc)}</div>` : ''}</td><td class="r">${esc(String(num(l.cant)).replace('.', ','))}</td><td class="r">${m(num(l.precio))}</td><td class="r">${m(num(l.cant) * num(l.precio))}</td></tr>`).join('')}
   </tbody></table>
-  <div class="tot"><table><tr><td>Base imponible</td><td class="r">${m(t.base)}</td></tr><tr><td>IVA ${num(p.iva)} %</td><td class="r">${m(t.iva)}</td></tr>${t.irpf ? `<tr><td>Retención IRPF ${t.pi} %</td><td class="r">${m(-t.irpf)}</td></tr>` : ''}<tr class="g"><td>Total</td><td class="r">${m(t.total)}</td></tr></table></div>
+  <div class="tot"><table><tr><td>Base imponible</td><td class="r">${m(t.base)}</td></tr><tr><td>IVA ${num(p.iva)} %</td><td class="r">${m(t.iva)}</td></tr><tr class="g"><td>Total</td><td class="r">${m(t.total)}</td></tr></table></div>
   <h3>Condiciones</h3><div class="cond">${PRE_COND(p).map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join('')}</div>
   ${p.notas ? `<div class="notas">${esc(p.notas)}</div>` : ''}
   <h3>Aceptación</h3><div style="font-size:9.3pt">Para aceptarlo, firma este presupuesto${p.encargo !== false ? ' y el encargo de tratamiento adjunto' : ''} y envíalo a ${esc(ID().email || 'nuestro correo')}.</div>
@@ -1656,7 +1654,6 @@ function preDocDef(p){
   const tot = { columns: [{ width: '*', text: '' }, { width: 200, table: { widths: ['*', 'auto'], body: [
       [{ text: 'Base imponible', margin: [6, 2, 0, 2] }, { text: m(t.base), alignment: 'right', margin: [0, 2, 6, 2] }],
       [{ text: `IVA ${num(p.iva)} %`, margin: [6, 2, 0, 2] }, { text: m(t.iva), alignment: 'right', margin: [0, 2, 6, 2] }],
-      ...(t.irpf ? [[{ text: `Retención IRPF ${t.pi} %`, margin: [6, 2, 0, 2] }, { text: m(-t.irpf), alignment: 'right', margin: [0, 2, 6, 2] }]] : []),
       [{ text: 'Total', bold: true, color: '#fff', fillColor: B, fontSize: 11.5, margin: [6, 5, 0, 5] }, { text: m(t.total), bold: true, color: '#fff', fillColor: B, fontSize: 11.5, alignment: 'right', margin: [0, 5, 6, 5] }]] }, layout: 'noBorders' }], margin: [0, 8, 0, 0], fontSize: 9.5 };
   const sign = labels => ({ table: { widths: labels.map(l => l[1]), heights: [55], body: [labels.map(l => ({ text: l[0], fontSize: 7.5, color: MU, margin: [4, 3, 4, 3] }))] }, layout: { hLineColor: () => LN, vLineColor: () => LN, hLineWidth: () => .8, vLineWidth: () => .8 } });
   const content = [
