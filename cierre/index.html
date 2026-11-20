@@ -1071,13 +1071,46 @@ async function odCliFolder(c, nombre){
 }
 const odErr = e => toast(e && e.code === 'local' ? e.message : mcpMsg(e), true);
 
-function emlBlob({ to, cc, subject, text, files }){
+const firmaDatos = () => { const i = ID(); return { nombre: i.nombre, marca: i.marca, email: i.email, web: i.web, logo: i.logo }; };
+async function firmaLogoPng(){
+  const l = firmaDatos().logo; if (!l) return null;
+  try {
+    if (/^data:image\/(png|jpe?g)/.test(l)) return l;
+    const svg = l.startsWith('data:image/svg') ? (l.includes(';base64,') ? decodeURIComponent(escape(atob(l.split(',')[1]))) : decodeURIComponent(l.split(',')[1])) : l;
+    const m = svg.match(/viewBox="[\d.\s-]+?\s([\d.]+)\s([\d.]+)"/), r = m ? +m[1] / +m[2] : 3.4;
+    return await svgPng(svg, Math.round(120 * r), 120);
+  } catch (e) { return null; }
+}
+function mailHTML(text, logo){
+  const f = firmaDatos(), e = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paras = text.trim().split(/\n{2,}/).map(b => `<p style="margin:0 0 14px">${e(b).replace(/\n/g, '<br>')}</p>`).join('');
+  const web = f.web ? `<a href="${/^https?:/i.test(f.web) ? e(f.web) : 'https://' + e(f.web)}" style="color:#2F5288;text-decoration:none">${e(f.web.replace(/^https?:\/\//i, ''))}</a>` : '';
+  const mail = f.email ? `<a href="mailto:${e(f.email)}" style="color:#2F5288;text-decoration:none">${e(f.email)}</a>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0">
+<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1B2A40;max-width:620px">${paras}
+<p style="margin:18px 0 10px">Un saludo,</p>
+<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:4px"><tr>
+${logo ? `<td style="padding:0 16px 0 0;vertical-align:middle;border-right:3px solid #E2662A"><img src="cid:firma-logo" alt="${e(f.marca)}" height="44" style="display:block;height:44px;width:auto;border:0"></td>` : ''}
+<td style="padding:0 0 0 ${logo ? 16 : 0}px;vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#56657A">
+<div style="font-size:15px;font-weight:bold;color:#1E3760">${e(f.nombre)}</div>
+${f.marca && f.marca !== f.nombre ? `<div style="color:#E2662A;font-weight:bold">${e(f.marca)}</div>` : ''}
+<div>${[mail, web].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div></td></tr></table>
+</div></body></html>`;
+}
+async function emlBlob({ to, cc, subject, text, files }){
   const b64 = s => btoa(unescape(encodeURIComponent(s))), wrap = s => s.replace(/.{1,76}/g, '$&\r\n');
   const hdr = s => /^[\x20-\x7e]*$/.test(s) ? s : '=?UTF-8?B?' + b64(s) + '?=';
-  const c = cfg(), bd = '=_tl' + Math.random().toString(36).slice(2);
-  let m = `MIME-Version: 1.0\r\nX-Unsent: 1\r\nDate: ${new Date().toUTCString()}\r\nFrom: ${hdr(ID().nombre)} <${ID().email || 'correo@ejemplo.es'}>\r\nTo: ${to}\r\n${cc ? 'Cc: ' + cc + '\r\n' : ''}Subject: ${hdr(subject)}\r\nContent-Type: multipart/mixed; boundary="${bd}"\r\n\r\n--${bd}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(b64(text))}`;
-  for (const f of files) m += `--${bd}\r\nContent-Type: ${f.type}; name="${f.name}"\r\nContent-Disposition: attachment; filename="${f.name}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(f.b64)}`;
-  return new Blob([m + `--${bd}--\r\n`], { type: 'message/rfc822' });
+  const c = cfg(), rnd = () => Math.random().toString(36).slice(2), bm = '=_m' + rnd(), br = '=_r' + rnd(), ba = '=_a' + rnd();
+  const logo = await firmaLogoPng();
+  const plain = text.trim() + '\n\n' + firma();
+  let m = `MIME-Version: 1.0\r\nX-Unsent: 1\r\nDate: ${new Date().toUTCString()}\r\nFrom: ${hdr(ID().nombre)} <${ID().email || 'correo@ejemplo.es'}>\r\nTo: ${to}\r\n${cc ? 'Cc: ' + cc + '\r\n' : ''}Subject: ${hdr(subject)}\r\nContent-Type: multipart/mixed; boundary="${bm}"\r\n\r\n`;
+  m += `--${bm}\r\nContent-Type: multipart/related; boundary="${br}"\r\n\r\n--${br}\r\nContent-Type: multipart/alternative; boundary="${ba}"\r\n\r\n`;
+  m += `--${ba}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(b64(plain))}`;
+  m += `--${ba}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(b64(mailHTML(text, logo)))}--${ba}--\r\n`;
+  if (logo) m += `--${br}\r\nContent-Type: image/png; name="logo.png"\r\nContent-ID: <firma-logo>\r\nContent-Disposition: inline; filename="logo.png"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(logo.split(',')[1])}`;
+  m += `--${br}--\r\n`;
+  for (const f of files) m += `--${bm}\r\nContent-Type: ${f.type}; name="${f.name}"\r\nContent-Disposition: attachment; filename="${f.name}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(f.b64)}`;
+  return new Blob([m + `--${bm}--\r\n`], { type: 'message/rfc822' });
 }
 const firma = () => `Un saludo,\n${ID().nombre}\n${ID().marca}${ID().email ? '\n' + ID().email : ''}`;
 const nombrePila = s => { const t = String(s || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0]; return t && !/^(d\.|dña\.|d\/dña\.)$/i.test(t) ? t : ''; };
@@ -1088,7 +1121,7 @@ function correoModal({ titulo, to, cc, ccNota, subject, text, file, marcar, onDo
     <label class="field full"><span>Para</span><input name="to" value="${esc(to || '')}" placeholder="correo@empresa.com"></label>
     <label class="field full"><span>CC (opcional)</span><input name="cc" value="${esc(cc || '')}">${ccNota ? `<small>${esc(ccNota)}</small>` : ''}</label>
     <label class="field full"><span>Asunto</span><input name="subject" value="${esc(subject)}"></label>
-    <label class="field full"><span>Texto</span><textarea name="text" rows="11">${esc(text)}</textarea></label>
+    <label class="field full"><span>Texto</span><textarea name="text" rows="11">${esc(text)}</textarea><small>La firma con tu logo se añade al final del correo.</small></label>
     <p class="note full" style="margin:0">Adjunto: ${esc(file.name)}</p>
     ${marcar ? `<label class="full" style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" name="marcar" checked style="width:auto"> ${esc(marcar)}</label>` : ''}
   </div>`, [{ label: 'Descargar correo', cls: 'primary', on: v => {
@@ -1097,7 +1130,7 @@ function correoModal({ titulo, to, cc, ccNota, subject, text, file, marcar, onDo
     const btn = document.querySelector('.modal-card [data-m="0"]'); if (btn) { btn.disabled = true; btn.textContent = 'Preparando…'; }
     (async () => {
       let ok = false;
-      try { const blob = await file.make(); const base = file.name.replace(/\.pdf$/i, ''); const eml = emlBlob({ to: list(v.to).join(', '), cc: list(v.cc).join(', '), subject: v.subject.trim(), text: v.text, files: [{ name: file.name, type: 'application/pdf', b64: await blobB64(blob) }] }); const zip = zipStore([{ name: 'Correo - ' + base + '.eml', data: new Uint8Array(await eml.arrayBuffer()) }]); ok = await saveFile('Correo ' + base + '.zip', zip); if (ok && onDone) onDone(v); }
+      try { const blob = await file.make(); const base = file.name.replace(/\.pdf$/i, ''); const eml = await emlBlob({ to: list(v.to).join(', '), cc: list(v.cc).join(', '), subject: v.subject.trim(), text: v.text, files: [{ name: file.name, type: 'application/pdf', b64: await blobB64(blob) }] }); const zip = zipStore([{ name: 'Correo - ' + base + '.eml', data: new Uint8Array(await eml.arrayBuffer()) }]); ok = await saveFile('Correo ' + base + '.zip', zip); if (ok && onDone) onDone(v); }
       catch (e) { console.error('eml', e); toast('No se pudo preparar el correo (' + (e && e.message || e) + ').', true); }
       if (ok) $('#modal-root').innerHTML = ''; else if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = 'Descargar correo'; }
     })();
@@ -1126,7 +1159,7 @@ function preCorreo(p){
   const ls = (p.lineas || []).filter(l => num(l.cant) * num(l.precio)), men = r2(ls.filter(esCred).reduce((a, l) => a + num(l.cant) * num(l.precio), 0)), uni = r2(ls.filter(l => !esCred(l)).reduce((a, l) => a + num(l.cant) * num(l.precio), 0));
   const importe = men && uni ? `Cuota mensual: ${money(men)} + IVA.\nPago único (${ls.filter(l => !esCred(l)).map(l => (l.concepto || '').toLowerCase()).join(', ')}): ${money(uni)} + IVA.` : men ? `Cuota mensual: ${money(men)} + IVA (${money(r2(men * (1 + num(p.iva ?? 21) / 100)))} con IVA).` : `Importe: ${money(t.base)} + IVA (${money(t.total)} con IVA).`;
   const np = nombrePila(cl.contacto);
-  const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el presupuesto ${p.num || ''}${p.titulo ? ' · ' + p.titulo : ''}.\n\n${importe}\nValidez: ${num(p.validez) || 30} días.\n\nPara aceptarlo, fírmalo y devuélvemelo respondiendo a este correo. Cualquier duda, quedo a tu disposición.\n\n${firma()}`;
+  const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el presupuesto ${p.num || ''}${p.titulo ? ' · ' + p.titulo : ''}.\n\n${importe}\nValidez: ${num(p.validez) || 30} días.\n\nPara aceptarlo, fírmalo y devuélvemelo respondiendo a este correo. Cualquier duda, quedo a tu disposición.`;
   const _to = cl.email || (a && a.email) || '', _cc = a && a.email && a.email !== _to ? a.email : '';
   correoModal({ titulo: 'Enviar presupuesto ' + (p.num || ''), to: _to, cc: _cc, ccNota: a ? (a.email ? (_cc ? 'En copia la asesoría ' + a.nombre + '.' : '') : 'La asesoría ' + a.nombre + ' no tiene correo en su ficha: añádelo en Asesorías para ponerla en copia.') : '', subject: `Presupuesto ${p.num || ''} · Time Laboris${a ? ' · ' + a.nombre : cl.nombre ? ' · ' + cl.nombre : ''}`, text, file: { name: preFile(p) + '.pdf', make: () => prePdfBlob(p) }, marcar: p.estado === 'borrador' ? 'Marcar el presupuesto como «Enviado»' : '', onDone: v => { if (v.marcar && p.id) { const d = clone(S.docs.get(p.id) || p); delete d.id; d.estado = 'enviado'; safe(() => Store.put(p.id, d)); } } });
 }
@@ -1147,7 +1180,7 @@ async function acuOneDrive(doc, id, d){
 }
 function acuCorreo(doc, d){
   const np = nombrePila(d.rep);
-  const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el acuerdo de colaboración para la implantación de Timelaboris entre vuestras empresas clientes: ${String(d.pct).replace('.', ',')} % de comisión sobre su facturación, liquidada cada semestre (en julio y en enero).\n\nSi estáis de acuerdo, fírmalo (a mano o con certificado digital) y devuélvemelo respondiendo a este correo.\n\n${firma()}`;
+  const text = `${np ? 'Hola ' + np + ',' : 'Hola,'}\n\nTe envío el acuerdo de colaboración para la implantación de Timelaboris entre vuestras empresas clientes: ${String(d.pct).replace('.', ',')} % de comisión sobre su facturación, liquidada cada semestre (en julio y en enero).\n\nSi estáis de acuerdo, fírmalo (a mano o con certificado digital) y devuélvemelo respondiendo a este correo.`;
   correoModal({ titulo: 'Enviar acuerdo · ' + d.nombre, to: doc.email || '', subject: 'Acuerdo de colaboración Timelaboris · ' + d.nombre, text, file: { name: acuFile(d) + '.pdf', make: () => acuPdfBlob(d) } });
 }
 /* ===== logo de la asesoría (pegar con Ctrl+V) ===== */
