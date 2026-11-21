@@ -178,6 +178,7 @@ textarea{resize:vertical}
     <button class="tab" data-nav="asesorias">Asesorías</button>
     <button class="tab" data-nav="movs">Movimientos</button>
     <button class="tab" data-nav="clientes">Clientes</button>
+    <button class="tab" data-nav="mandatos">Mandatos SEPA</button>
     <button class="tab" data-nav="presupuestos">Presupuestos</button>
     <button class="tab" data-nav="escala">Escala de compra</button>
     <button class="tab" data-nav="certificados">Certificados</button>
@@ -531,7 +532,7 @@ function viewResumen(){
   if (porEmitir.length) tasks.push(['var(--warn)', `${porEmitir.length} factura${porEmitir.length > 1 ? 's' : ''} por emitir`, `${money(porEmitir.reduce((a, f) => a + f.total, 0))} con IVA. Emítelas en tu programa de facturación y márcalas.`, 'cierre', 'Abrir']);
   if (com.base && !com.st.estado) tasks.push(['var(--warn)', 'Factura de comisión por emitir', `${money(com.total)} a Creative Quality (${c.comisionPct} % de ${money(com.ventas)})`, 'cierre', 'Abrir']);
   if (sepaPend.length) tasks.push(['var(--info)', `Remesa SEPA lista: ${sepaPend.length} recibos`, money(sepaPend.reduce((a, f) => a + f.total, 0)), 'cobros', 'Generar']);
-  if (sepaFalta.length) tasks.push(['var(--warn)', `${sepaFalta.length} cliente${sepaFalta.length > 1 ? 's' : ''} sin IBAN o mandato`, 'No entrarán en la remesa hasta completarlos.', 'clientes', 'Completar']);
+  if (sepaFalta.length) tasks.push(['var(--warn)', `${sepaFalta.length} cliente${sepaFalta.length > 1 ? 's' : ''} sin IBAN o mandato`, 'No entrarán en la remesa hasta completarlos.', 'mandatos', 'Completar']);
   { const pf = certPorFacturar(), rn = certRenov(); if (pf.length) tasks.push(['var(--warn)', `${pf.length} certificado${pf.length > 1 ? 's' : ''} sin confirmar facturación`, 'Comprados a Creative Quality y sin marcar como facturados al cliente.', 'certificados', 'Ver']); if (rn.length) tasks.push(['var(--info)', `${rn.length} certificado${rn.length > 1 ? 's' : ''} por renovar`, rn.slice(0, 2).map(certNombre).join(', '), 'certificados', 'Ver']); }
   if (dev.length) tasks.push(['var(--bad)', `${dev.length} recibo${dev.length > 1 ? 's' : ''} devuelto${dev.length > 1 ? 's' : ''}`, money(dev.reduce((a, i) => a + i.importe, 0)) + ' por reclamar', 'cobros', 'Ver']);
   const saldo = saldoCreditos();
@@ -775,11 +776,11 @@ function render(){
   if (S.dirty && (S.view === 'ajustes' || S.view === 'escala' || (S.view === 'presupuestos' && (S.editPre || PRE.cat)) || (S.view === 'clientes' && S.editCli))) return;
   const ae = document.activeElement, fid = ae && ae.id, pos = ae && ae.selectionStart;
   let h = banner();
-  h += S.mode === 'loading' ? '<div class="empty"><p>Cargando tus datos…</p></div>' : ({ resumen: viewResumen, libro: viewLibro, cierre: viewCierre, cobros: viewCobros, asesorias: viewAsesorias, movs: viewMovs, clientes: viewClientes, presupuestos: viewPresupuestos, escala: viewEscala, certificados: viewCert, simulador: viewSim, ajustes: viewAjustes })[S.view]();
+  h += S.mode === 'loading' ? '<div class="empty"><p>Cargando tus datos…</p></div>' : ({ resumen: viewResumen, libro: viewLibro, cierre: viewCierre, cobros: viewCobros, asesorias: viewAsesorias, movs: viewMovs, clientes: viewClientes, mandatos: viewMandatos, presupuestos: viewPresupuestos, escala: viewEscala, certificados: viewCert, simulador: viewSim, ajustes: viewAjustes })[S.view]();
   $('#main').innerHTML = h;
   if (fid && document.getElementById(fid)) { const el = document.getElementById(fid); el.focus(); try { pos != null && el.setSelectionRange(pos, pos); } catch (e) {} }
 }
-const VIEWS = ['resumen', 'libro', 'cierre', 'cobros', 'asesorias', 'movs', 'clientes', 'presupuestos', 'escala', 'certificados', 'simulador', 'ajustes'];
+const VIEWS = ['resumen', 'libro', 'cierre', 'cobros', 'asesorias', 'movs', 'clientes', 'mandatos', 'presupuestos', 'escala', 'certificados', 'simulador', 'ajustes'];
 function go(v){ S.view = v; S.dirty = false; S.editCli = null; S.editPre = null; PRE.cat = false; PRE.catItems = null; if (location.hash !== '#' + v) location.hash = v; render(); scrollTo(0, 0); }
 addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== S.view) { S.view = v; S.dirty = false; S.editCli = null; render(); } });
 
@@ -1926,6 +1927,133 @@ ACTS['cert-f'] = el => { CERT.filtro = el.dataset.v; render(); };
 ACTS['cert-fact'] = el => { const d = S.docs.get(el.dataset.id); certPut(el.dataset.id, { facturado: d && d.facturado === 'si' ? '' : 'si' }); };
 ACTS['cert-renov'] = el => certPut(el.dataset.id, { renovado: today() });
 document.addEventListener('change', e => { const id = e.target.dataset && e.target.dataset.certVenta; if (id) certPut(id, { venta: num(e.target.value) }); });
+/* ===== mandatos SEPA (orden de domiciliación a nombre del distribuidor) ===== */
+const acreedor = () => { const i = ID(); return { nombre: i.nombre, marca: i.marca, nif: i.nif || '', dir: i.dir || '', email: i.email || '' }; };
+const MAN = { filtro: 'activos', q: '' };
+function ultMov(){ const o = {}; for (const d of S.docs.values()) if (d.kind === 'mov') for (const r of [...(d.recargas || []), ...(d.otras || [])]) if (r.cli && (!o[r.cli] || r.fecha > o[r.cli])) o[r.cli] = r.fecha; return o; }
+const manRef = c => c.mandatoRef || ('TL-' + (c.codigo || normCif(c.cif) || c.id.replace(/^cli_/, '')));
+function manEstado(c){ if (c.mandatoFecha && c.iban && ibanOk(c.iban)) return 'firmado'; if (c.mandatoFecha) return 'sin-iban'; if (c.mandatoEnviado) return 'enviado'; return 'pendiente'; }
+function manChip(c){ const e = manEstado(c); return e === 'firmado' ? chip('c-ok', 'Firmado ' + fdmy(c.mandatoFecha)) : e === 'sin-iban' ? chip('c-warn', 'Firmado, falta IBAN') : e === 'enviado' ? chip('c-info', 'Enviado ' + fdmy(c.mandatoEnviado)) : chip('c-neutral', 'Pendiente'); }
+function manLista(){
+  const um = ultMov(), y = today().slice(0, 4);
+  let cs = clientes().filter(c => /domicil/i.test(c.formaPago || '') && !c.baja && !c.potencial).map(c => ({ ...c, _um: um[c.id] || '' }));
+  const total = cs.length, activos = cs.filter(c => c._um.startsWith(y)).length;
+  if (MAN.filtro === 'activos') cs = cs.filter(c => c._um.startsWith(y));
+  if (MAN.filtro === 'pend') cs = cs.filter(c => manEstado(c) !== 'firmado');
+  const q = normName(MAN.q); if (q) cs = cs.filter(c => normName(c.nombre).includes(q) || normCif(c.cif).includes(normCif(MAN.q)));
+  return { cs, total, activos };
+}
+function manDocDef(c){
+  const a = acreedor(), ics = cfg().ics || icsFrom(a.nif);
+  const B = '#2F5288', O = '#E2662A', MU = '#56657A', LN = '#AEB9C7';
+  const lab = t => ({ text: t, fontSize: 7.5, color: MU, margin: [0, 6, 0, 1] });
+  const val = (t, opt = {}) => ({ table: { widths: ['*'], body: [[{ text: t || ' ', fontSize: 10, bold: !!t, margin: [4, 3, 4, 3], ...opt }]] }, layout: { hLineColor: () => LN, vLineColor: () => LN, hLineWidth: () => .7, vLineWidth: () => .7 } });
+  const ib = ibanOk(c.iban) ? ibanFmt(c.iban) : '';
+  const ibanBoxes = { table: { widths: Array(34).fill('*'), heights: [16], body: [Array(34).fill(0).map((_, i) => ({ text: ib.replace(/\s/g, '')[i] || (i < 2 && !ib ? 'ES'[i] : ''), alignment: 'center', fontSize: 8.5, bold: true, margin: [0, 2, 0, 0] }))] }, layout: { hLineColor: () => LN, vLineColor: () => LN, hLineWidth: () => .7, vLineWidth: () => .7 } };
+  const band = t => ({ table: { widths: ['*'], body: [[{ text: t.toUpperCase(), color: '#fff', bold: true, fontSize: 8.5, characterSpacing: 1, fillColor: B, margin: [5, 3, 5, 3] }]] }, layout: 'noBorders', margin: [0, 12, 0, 0] });
+  const dirCli = [c.direccion, [c.cp, c.poblacion].filter(Boolean).join(' '), c.provincia && c.provincia !== c.poblacion ? '(' + c.provincia + ')' : ''].filter(Boolean).join(', ').replace(', (', ' (');
+  return {
+    pageSize: 'A4', pageMargins: [40, 36, 40, 40], defaultStyle: { fontSize: 9.5, color: '#1B2A40' },
+    info: { title: 'Orden de domiciliación SEPA ' + manRef(c), author: a.marca },
+    content: [
+      { columns: [logoPDF(), { width: '*', stack: [{ text: 'Orden de domiciliación de adeudo directo SEPA', alignment: 'right', color: B, bold: true, fontSize: 13 }, { text: 'SEPA Direct Debit Mandate · CORE', alignment: 'right', color: MU, fontSize: 8.5, margin: [0, 3, 0, 0] }] }] },
+      { canvas: [{ type: 'rect', x: 0, y: 0, w: 113, h: 2.5, color: O }, { type: 'rect', x: 113, y: 0, w: 402, h: 2.5, color: B }], margin: [0, 8, 0, 4] },
+      lab('Referencia de la orden de domiciliación / Mandate reference'), val(manRef(c)),
+      band('Datos del acreedor / Creditor'),
+      { columns: [{ width: '*', stack: [lab('Identificador del acreedor / Creditor identifier'), val(ics)] }, { width: 12, text: '' }, { width: '*', stack: [lab('Nombre del acreedor / Creditor name'), val(a.nombre + (a.marca && a.marca !== a.nombre ? ' (' + a.marca + ')' : ''))] }] },
+      lab('Dirección / Address'), val(a.dir + ' · España'),
+      { text: 'Mediante la firma de esta orden de domiciliación, el deudor autoriza (A) al acreedor a enviar instrucciones a la entidad del deudor para adeudar su cuenta y (B) a la entidad para efectuar los adeudos en su cuenta siguiendo las instrucciones del acreedor. Como parte de sus derechos, el deudor está legitimado al reembolso por su entidad en los términos y condiciones del contrato suscrito con la misma. La solicitud de reembolso deberá efectuarse dentro de las ocho semanas que siguen a la fecha de adeudo en cuenta. Puede obtener información adicional sobre sus derechos en su entidad financiera.', fontSize: 8, color: MU, margin: [0, 10, 0, 0], alignment: 'justify' },
+      band('Datos del deudor / Debtor'),
+      lab('Nombre del deudor / Debtor name'), val(c.nombre),
+      { columns: [{ width: 150, stack: [lab('NIF / CIF'), val(c.cif)] }, { width: 12, text: '' }, { width: '*', stack: [lab('Dirección / Address'), val(dirCli)] }] },
+      { columns: [{ width: '*', stack: [lab('País / Country'), val('España')] }, { width: 12, text: '' }, { width: '*', stack: [lab('Swift BIC (opcional) / Swift BIC (optional)'), val('')] }] },
+      lab('Número de cuenta · IBAN / Account number · IBAN'), ibanBoxes,
+      { text: 'En España el IBAN consta de 24 posiciones comenzando siempre por ES.', fontSize: 7.5, color: MU, margin: [0, 2, 0, 0] },
+      lab('Tipo de pago / Type of payment'),
+      { text: [{ text: '[ X ]  ', bold: true }, 'Pago recurrente / Recurrent payment          ', { text: '[   ]  ', bold: true }, 'Pago único / One-off payment'], fontSize: 9.5, margin: [0, 2, 0, 0] },
+      { columns: [{ width: '*', stack: [lab('Fecha – Localidad / Date – Location in which you are signing'), val('', { margin: [4, 8, 4, 8] })] }, { width: 12, text: '' }, { width: '*', stack: [lab('Firma del deudor / Signature of the debtor'), { table: { widths: ['*'], heights: [70], body: [[' ']] }, layout: { hLineColor: () => LN, vLineColor: () => LN, hLineWidth: () => .7, vLineWidth: () => .7 } }] }] },
+      { text: 'TODOS LOS CAMPOS HAN DE SER CUMPLIMENTADOS OBLIGATORIAMENTE. UNA VEZ FIRMADA ESTA ORDEN DE DOMICILIACIÓN DEBE SER ENVIADA AL ACREEDOR PARA SU CUSTODIA.', fontSize: 7.5, bold: true, color: B, margin: [0, 14, 0, 0], alignment: 'center' },
+      { text: 'ALL GAPS ARE MANDATORY. ONCE THIS MANDATE HAS BEEN SIGNED MUST BE SENT TO CREDITOR FOR STORAGE.', fontSize: 7, color: MU, margin: [0, 2, 0, 0], alignment: 'center' },
+      { text: `Responsable del tratamiento: ${a.nombre} (${a.nif}). Finalidad: gestionar el cobro de los servicios contratados mediante adeudo directo SEPA. Base: ejecución del contrato. Los datos se comunicarán a las entidades financieras necesarias para el cobro. Puede ejercer sus derechos de acceso, rectificación, supresión y demás escribiendo a ${a.email}.`, fontSize: 6.8, color: MU, margin: [0, 12, 0, 0], alignment: 'justify' }
+    ]
+  };
+}
+const manFile = c => `Orden domiciliacion SEPA ${manRef(c)} ${sx(c.nombre, 40).replace(/[. ]+$/, '')}.pdf`;
+const manPdfBlob = c => { if (!window.pdfMake || !window.pdfMake.createPdf) return Promise.reject(new Error('no se pudo cargar el generador de PDF; recarga la página')); return new Promise((res, rej) => { try { window.pdfMake.createPdf(manDocDef(c)).getBlob(res); } catch (e) { rej(e); } }); };
+function manTexto(c){
+  const np = nombrePila(c.contacto), a = acreedor();
+  return `${np ? 'Hola ' + np + ',' : 'Hola,'}
+
+Te escribo por el cobro de Time Laboris de ${nombreBonito(c.nombre)}. A partir de las próximas facturas, la factura y el recibo domiciliado te los emito yo directamente como distribuidor (${a.nombre}, ${a.marca}), en lugar del anterior distribuidor. Por normativa SEPA, para poder seguir cargando el recibo en vuestra cuenta necesito una orden de domiciliación firmada a mi nombre.
+
+Te adjunto la orden ya rellenada con los datos de la empresa. Solo tienes que:
+1. Escribir el IBAN de la cuenta donde queréis los cargos${ibanOk(c.iban) ? ' (he puesto el que tengo; compruébalo)' : ''}.
+2. Poner fecha y localidad y firmarla (vale firma digital o firmada a mano y escaneada).
+3. Devolvérmela respondiendo a este correo.
+
+La referencia del mandato es ${manRef(c)}. El importe de cada cargo será el de la factura del mes, que recibirás antes del cobro. No cambia nada más: mismo servicio y mismas condiciones.
+
+Gracias y quedo a tu disposición para cualquier duda.`;
+}
+const manAsunto = c => `Orden de domiciliación SEPA · ${nombreBonito(c.nombre)}`;
+function manCorreo(c){
+  const a = c.asesoria ? asesorias().find(x => x.codigo === c.asesoria) : null;
+  correoModal({ titulo: 'Mandato SEPA · ' + c.nombre, to: c.email || '', cc: '', ccNota: a && a.email ? 'Si quieres, pon en copia a la asesoría ' + a.nombre + ' (' + a.email + ').' : '', subject: manAsunto(c), text: manTexto(c),
+    file: { name: manFile(c), make: () => manPdfBlob(c) }, marcar: 'Marcar como enviado hoy',
+    onDone: v => { if (v.marcar !== false) { const p = { mandatoEnviado: today(), mandatoRef: manRef(c) }; const em = v.to.split(/[;,\s]+/).filter(Boolean)[0]; if (em && !c.email) p.email = em; manPut(c.id, p); } } });
+}
+async function manPut(id, patch){ const d = S.docs.get(id); if (!d) return; const n = { ...d, ...patch }; delete n.id; await safe(() => Store.put(id, n)); render(); }
+async function manTodos(btn){
+  const { cs } = manLista(), sel = cs.filter(c => c.email && manEstado(c) === 'pendiente');
+  if (!sel.length) { toast('No hay mandatos pendientes con correo en esta lista.', true); return; }
+  const t = btn.textContent; btn.disabled = true; btn.textContent = 'Preparando ' + sel.length + '…';
+  try {
+    const files = [];
+    for (const c of sel) { const pdf = await manPdfBlob(c); const eml = await emlBlob({ to: c.email, cc: '', subject: manAsunto(c), text: manTexto(c), files: [{ name: manFile(c), type: 'application/pdf', b64: await blobB64(pdf) }] }); files.push({ name: 'Correo - ' + manFile(c).replace(/\.pdf$/i, '') + '.eml', data: new Uint8Array(await eml.arrayBuffer()) }); }
+    if (await saveFile(`Mandatos SEPA ${today()} (${sel.length} correos).zip`, zipStore(files))) {
+      confirmBox('¿Marcar como enviados?', `Se han preparado ${sel.length} correos. Ábrelos en Thunderbird, revísalos y envíalos. ¿Los marco ya como enviados hoy?`, 'Marcar enviados', async () => { for (const c of sel) { const d = S.docs.get(c.id); const n = { ...d, mandatoEnviado: today(), mandatoRef: manRef(d) }; delete n.id; await safe(() => Store.put(c.id, n)); } render(); toast(sel.length + ' mandatos marcados como enviados'); });
+    }
+  } catch (e) { console.error(e); toast('No se pudieron preparar los correos (' + (e && e.message || e) + ').', true); }
+  btn.disabled = false; btn.textContent = t;
+}
+function manFirmado(c){
+  modal('Mandato firmado · ' + c.nombre, `<p>Cuando te devuelva la orden firmada, apunta aquí la fecha de firma y el IBAN. Guarda el PDF firmado: el banco te lo puede pedir si hay una devolución.</p>
+  <div class="fgrid"><label class="field"><span>Fecha de firma</span><input type="date" name="f" value="${esc(c.mandatoFecha || today())}"></label>
+  <label class="field"><span>Referencia</span><input name="r" value="${esc(manRef(c))}"></label>
+  <label class="field full"><span>IBAN</span><input name="i" value="${esc(ibanFmt(c.iban))}" placeholder="ES00 0000 0000 0000 0000 0000"></label></div>`,
+  [{ label: 'Guardar', cls: 'primary', on: v => { const i = ibanClean(v.i); if (i && !ibanOk(i)) { toast('El IBAN no es válido. Revísalo.', true); return false; } if (!v.f) { toast('Pon la fecha de firma.', true); return false; } manPut(c.id, { mandatoFecha: v.f, mandatoRef: v.r.trim() || manRef(c), iban: i }); } }]);
+}
+function viewMandatos(){
+  const { cs, total, activos } = manLista(), all = clientes().filter(c => /domicil/i.test(c.formaPago || '') && !c.baja && !c.potencial);
+  const n = e => all.filter(c => manEstado(c) === e).length, sinMail = cs.filter(c => !c.email && manEstado(c) !== 'firmado').length;
+  const listos = cs.filter(c => c.email && manEstado(c) === 'pendiente').length;
+  return `<div class="head"><div><h2>Mandatos SEPA</h2><p>Orden de domiciliación a tu nombre para cada cliente que paga por recibo. Sin mandato firmado no entra en la remesa.</p></div>
+    <div class="row"><button class="btn primary" data-act="man-todos" ${listos ? '' : 'disabled'}>Preparar ${listos} correo${listos === 1 ? '' : 's'} pendiente${listos === 1 ? '' : 's'}</button></div></div>
+  <div class="kpis">
+    <div class="kpi"><label>Pagan por recibo</label><span class="v">${intf(total)}</span><span class="s">${intf(activos)} con movimientos este año</span></div>
+    <div class="kpi ${n('pendiente') ? 'warn' : ''}"><label>Pendientes de enviar</label><span class="v">${intf(n('pendiente'))}</span><span class="s">sin orden enviada</span></div>
+    <div class="kpi"><label>Enviados</label><span class="v">${intf(n('enviado'))}</span><span class="s">esperando la firma</span></div>
+    <div class="kpi good"><label>Firmados</label><span class="v">${intf(n('firmado'))}</span><span class="s">${n('sin-iban') ? n('sin-iban') + ' sin IBAN' : 'con IBAN, listos para remesa'}</span></div>
+  </div>
+  <div class="filters"><input type="search" id="man-q" placeholder="Buscar por nombre o CIF" value="${esc(MAN.q)}">
+    <div class="row">${[['activos', 'Activos este año'], ['pend', 'Sin firmar'], ['todos', 'Todos']].map(([k, l]) => `<button class="btn sm ${MAN.filtro === k ? 'primary' : ''}" data-act="man-f" data-v="${k}">${l}</button>`).join('')}</div></div>
+  ${sinMail ? `<p class="note" style="margin:0 0 10px"><b>${sinMail} cliente${sinMail === 1 ? '' : 's'} de esta lista sin correo.</b> Escríbelo en la columna Correo (se guarda en su ficha) o pon la dirección al preparar el correo.</p>` : ''}
+  <div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Correo</th><th>Referencia</th><th>Estado</th><th class="r">Acciones</th></tr></thead><tbody>
+  ${cs.map(c => `<tr><td><div class="cn">${esc(c.nombre)}</div><div class="cs">${esc(c.cif || 'Sin CIF')}${c._um ? ' · último movimiento ' + fdmy(c._um) : ' · sin movimientos'}${!c.direccion ? ' · <span style="color:var(--warn)">sin dirección</span>' : ''}</div></td>
+    <td><input class="inl" style="width:210px" id="mm-${esc(c.id)}" data-man-mail="${esc(c.id)}" type="email" value="${esc(c.email || '')}" placeholder="falta correo"></td>
+    <td class="mono" style="font-size:12.5px">${esc(manRef(c))}</td><td>${manChip(c)}</td>
+    <td class="r"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm ${manEstado(c) === 'pendiente' ? 'primary' : ''}" data-act="man-mail" data-id="${esc(c.id)}">${manEstado(c) === 'pendiente' ? 'Correo' : 'Reenviar'}</button><button class="btn sm ghost" data-act="man-pdf" data-id="${esc(c.id)}">PDF</button><button class="btn sm" data-act="man-firm" data-id="${esc(c.id)}">${manEstado(c) === 'firmado' ? 'Editar' : 'Firmado'}</button></div></td></tr>`).join('') || '<tr><td colspan="5" class="note">No hay clientes en esta lista.</td></tr>'}
+  </tbody></table></div>
+  <p class="note" style="margin-top:10px">«Correo» descarga el correo redactado con la orden en PDF adjunta, listo para abrir en Thunderbird. «Preparar correos» hace lo mismo para todos los pendientes con correo, en un solo zip. Esquema CORE, pago recurrente.</p>`;
+}
+ACTS['man-f'] = el => { MAN.filtro = el.dataset.v; render(); };
+ACTS['man-mail'] = el => { const c = S.docs.get(el.dataset.id); if (c) manCorreo(c); };
+ACTS['man-firm'] = el => { const c = S.docs.get(el.dataset.id); if (c) manFirmado(c); };
+ACTS['man-pdf'] = async el => { const c = S.docs.get(el.dataset.id); if (!c) return; try { await saveFile(manFile(c), await manPdfBlob(c)); } catch (e) { toast('No se pudo generar el PDF (' + (e && e.message || e) + ').', true); } };
+ACTS['man-todos'] = el => manTodos(el);
+document.addEventListener('change', e => { const id = e.target.dataset && e.target.dataset.manMail; if (!id) return; const v = e.target.value.trim(); if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast('Ese correo no parece válido.', true); return; } manPut(id, { email: v }); });
+document.addEventListener('input', e => { if (e.target.id === 'man-q') { MAN.q = e.target.value; render(); } });
+
 
 /* ===== arranque: acceso, nube y demostración ===== */
 const CONF = window.CIERRE_CONFIG || {};
