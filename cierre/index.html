@@ -1930,7 +1930,7 @@ document.addEventListener('change', e => { const id = e.target.dataset && e.targ
 /* ===== mandatos SEPA (orden de domiciliación a nombre del distribuidor) ===== */
 const acreedor = () => { const i = ID(); return { nombre: i.nombre, marca: i.marca, nif: i.nif || '', dir: i.dir || '', email: i.email || '' }; };
 const MAN = { filtro: 'activos', q: '' };
-function ultMov(){ const o = {}; for (const d of S.docs.values()) if (d.kind === 'mov') for (const r of [...(d.recargas || []), ...(d.otras || [])]) if (r.cli && (!o[r.cli] || r.fecha > o[r.cli])) o[r.cli] = r.fecha; return o; }
+function ultMov(){ const o = {}; for (const d of S.docs.values()) if (d.kind === 'mov') for (const r of (d.recargas || [])) if (r.cli && (!o[r.cli] || r.fecha > o[r.cli])) o[r.cli] = r.fecha; return o; }
 const manRef = c => c.mandatoRef || ('TL-' + (c.codigo || normCif(c.cif) || c.id.replace(/^cli_/, '')));
 function manEstado(c){ if (c.mandatoFecha && c.iban && ibanOk(c.iban)) return 'firmado'; if (c.mandatoFecha) return 'sin-iban'; if (c.mandatoEnviado) return 'enviado'; return 'pendiente'; }
 function manChip(c){ const e = manEstado(c); return e === 'firmado' ? chip('c-ok', 'Firmado ' + fdmy(c.mandatoFecha)) : e === 'sin-iban' ? chip('c-warn', 'Firmado, falta IBAN') : e === 'enviado' ? chip('c-info', 'Enviado ' + fdmy(c.mandatoEnviado)) : chip('c-neutral', 'Pendiente'); }
@@ -2030,16 +2030,16 @@ function viewMandatos(){
   return `<div class="head"><div><h2>Mandatos SEPA</h2><p>Orden de domiciliación a tu nombre para cada cliente que paga por recibo. Sin mandato firmado no entra en la remesa.</p></div>
     <div class="row"><button class="btn primary" data-act="man-todos" ${listos ? '' : 'disabled'}>Preparar ${listos} correo${listos === 1 ? '' : 's'} pendiente${listos === 1 ? '' : 's'}</button></div></div>
   <div class="kpis">
-    <div class="kpi"><label>Pagan por recibo</label><span class="v">${intf(total)}</span><span class="s">${intf(activos)} con movimientos este año</span></div>
+    <div class="kpi"><label>Pagan por recibo</label><span class="v">${intf(total)}</span><span class="s">${intf(activos)} con recargas Time Laboris este año</span></div>
     <div class="kpi ${n('pendiente') ? 'warn' : ''}"><label>Pendientes de enviar</label><span class="v">${intf(n('pendiente'))}</span><span class="s">sin orden enviada</span></div>
     <div class="kpi"><label>Enviados</label><span class="v">${intf(n('enviado'))}</span><span class="s">esperando la firma</span></div>
     <div class="kpi good"><label>Firmados</label><span class="v">${intf(n('firmado'))}</span><span class="s">${n('sin-iban') ? n('sin-iban') + ' sin IBAN' : 'con IBAN, listos para remesa'}</span></div>
   </div>
   <div class="filters"><input type="search" id="man-q" placeholder="Buscar por nombre o CIF" value="${esc(MAN.q)}">
-    <div class="row">${[['activos', 'Activos este año'], ['pend', 'Sin firmar'], ['todos', 'Todos']].map(([k, l]) => `<button class="btn sm ${MAN.filtro === k ? 'primary' : ''}" data-act="man-f" data-v="${k}">${l}</button>`).join('')}</div></div>
+    <div class="row">${[['activos', 'Con recargas este año'], ['pend', 'Sin firmar'], ['todos', 'Todos']].map(([k, l]) => `<button class="btn sm ${MAN.filtro === k ? 'primary' : ''}" data-act="man-f" data-v="${k}">${l}</button>`).join('')}</div></div>
   ${sinMail ? `<p class="note" style="margin:0 0 10px"><b>${sinMail} cliente${sinMail === 1 ? '' : 's'} de esta lista sin correo.</b> Escríbelo en la columna Correo (se guarda en su ficha) o pon la dirección al preparar el correo.</p>` : ''}
   <div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Correo</th><th>Referencia</th><th>Estado</th><th class="r">Acciones</th></tr></thead><tbody>
-  ${cs.map(c => `<tr><td><div class="cn">${esc(c.nombre)}</div><div class="cs">${esc(c.cif || 'Sin CIF')}${c._um ? ' · último movimiento ' + fdmy(c._um) : ' · sin movimientos'}${!c.direccion ? ' · <span style="color:var(--warn)">sin dirección</span>' : ''}</div></td>
+  ${cs.map(c => `<tr><td><div class="cn">${esc(c.nombre)}</div><div class="cs">${esc(c.cif || 'Sin CIF')}${c._um ? ' · última recarga ' + fdmy(c._um) : ' · sin recargas'}${!c.direccion ? ' · <span style="color:var(--warn)">sin dirección</span>' : ''}</div></td>
     <td><input class="inl" style="width:210px" id="mm-${esc(c.id)}" data-man-mail="${esc(c.id)}" type="email" value="${esc(c.email || '')}" placeholder="falta correo"></td>
     <td class="mono" style="font-size:12.5px">${esc(manRef(c))}</td><td>${manChip(c)}</td>
     <td class="r"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm ${manEstado(c) === 'pendiente' ? 'primary' : ''}" data-act="man-mail" data-id="${esc(c.id)}">${manEstado(c) === 'pendiente' ? 'Correo' : 'Reenviar'}</button><button class="btn sm ghost" data-act="man-pdf" data-id="${esc(c.id)}">PDF</button><button class="btn sm" data-act="man-firm" data-id="${esc(c.id)}">${manEstado(c) === 'firmado' ? 'Editar' : 'Firmado'}</button></div></td></tr>`).join('') || '<tr><td colspan="5" class="note">No hay clientes en esta lista.</td></tr>'}
