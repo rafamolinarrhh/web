@@ -663,14 +663,17 @@ function viewMovs(){
 }
 
 function viewClientes(){
-  const q = normName(S.q), cs = clientes().filter(c => !q || normName(c.nombre).includes(q) || normCif(c.cif).includes(normCif(S.q)) || (c.codigo || '').includes(S.q.trim()));
-  const all = clientes(), dom = all.filter(c => /domicil/i.test(c.formaPago || '')), listos = dom.filter(c => sepaReady(c).ok);
+  const q = normName(S.q), F = S.cliF || 'todos', cs = clientes().filter(c => (F === 'todos' || (F === 'posibles' ? !!c.potencial : !c.potencial)) && (!q || normName(c.nombre).includes(q) || normName(c.contacto).includes(q) || normCif(c.cif).includes(normCif(S.q)) || (c.codigo || '').includes(S.q.trim())));
+  const all = clientes(), nPos = all.filter(c => c.potencial).length, dom = all.filter(c => /domicil/i.test(c.formaPago || '')), listos = dom.filter(c => sepaReady(c).ok);
   const e = S.editCli;
   const form = e ? `<form class="panel side" id="cli-form"><h3>${e.id ? esc(e.nombre) : 'Nuevo cliente'}</h3><p class="sub">${e.codigo ? 'Código ' + esc(e.codigo) : 'Datos de facturación y domiciliación.'}</p>
     <div class="fgrid">
       <label class="field full"><span>Razón social</span><input id="c-nom" data-c="nombre" value="${esc(e.nombre)}"></label>
       <label class="field"><span>CIF / NIF</span><input id="c-cif" data-c="cif" value="${esc(e.cif)}"></label>
       <label class="field"><span>Email facturas</span><input id="c-em" data-c="email" value="${esc(e.email)}"></label>
+      <label class="field"><span>Persona de contacto</span><input id="c-con" data-c="contacto" value="${esc(e.contacto)}"></label>
+      <label class="field"><span>Teléfono</span><input id="c-tel" data-c="telefono" value="${esc(e.telefono)}"></label>
+      <label class="field"><span>Estado</span><select id="c-pot" data-c="potencial"><option value="">Cliente</option><option value="si" ${e.potencial ? 'selected' : ''}>Posible cliente</option></select></label>
       <label class="field full"><span>Dirección</span><input id="c-dir" data-c="direccion" value="${esc(e.direccion)}"></label>
       <label class="field"><span>C. postal</span><input id="c-cp" data-c="cp" value="${esc(e.cp)}"></label>
       <label class="field"><span>Población</span><input id="c-pob" data-c="poblacion" value="${esc(e.poblacion)}"></label>
@@ -680,14 +683,16 @@ function viewClientes(){
       <label class="field full"><span>IBAN</span><input id="c-iban" data-c="iban" value="${esc(ibanFmt(e.iban))}" placeholder="ES00 0000 0000 0000 0000 0000">${e.iban && !ibanOk(e.iban) ? '<small style="color:var(--bad)">IBAN no válido</small>' : ''}</label>
       <label class="field"><span>Referencia del mandato</span><input id="c-mr" data-c="mandatoRef" value="${esc(e.mandatoRef)}"></label>
       <label class="field"><span>Fecha de firma</span><input id="c-mf" type="date" data-c="mandatoFecha" value="${esc(e.mandatoFecha)}"></label>
+      <label class="field full"><span>Notas</span><textarea id="c-not" data-c="notas" rows="2">${esc(e.notas || '')}</textarea>${(e.reservas || []).length ? `<small>Citas reservadas: ${e.reservas.map(r => fdmy(r.fecha) + ' ' + esc(r.servicio || '') + (r.cancelada ? ' (cancelada)' : '')).join(' · ')}</small>` : ''}</label>
       <label class="field full"><span>Asesoría que la trae (cobra comisión)</span><select id="c-ase" data-c="asesoria"><option value="">Ninguna</option>${asesorias().map(a => `<option value="${esc(a.codigo)}" ${e.asesoria === a.codigo ? 'selected' : ''}>${esc(a.nombre)} (${esc(a.codigo)})</option>`).join('')}</select></label>
     </div>
     <div class="row" style="margin-top:14px;justify-content:space-between">${e.id ? '<button type="button" class="btn ghost danger" data-act="cli-del">Eliminar</button>' : '<span></span>'}<div class="row"><button type="button" class="btn ghost" data-act="cli-cancel">Cancelar</button><button class="btn primary">Guardar</button></div></div>
-  </form>` : `<div class="panel side"><h3>Domiciliaciones</h3><p class="sub">${listos.length} de ${dom.length} clientes con recibo tienen IBAN y mandato a tu nombre.</p><div class="row"><button class="btn primary" data-act="cli-new">+ Nuevo cliente</button><button class="btn" data-act="import">Importar fichero</button></div></div>`;
-  return `<div class="head"><div><h2>Clientes</h2><p>${all.length} clientes · ${dom.length} pagan por recibo domiciliado</p></div><div class="row"><button class="btn" data-act="exp-cli">Exportar clientes</button></div></div>
+  </form>` : `<div class="panel side"><h3>Domiciliaciones</h3><p class="sub">${listos.length} de ${dom.length} clientes con recibo tienen IBAN y mandato a tu nombre.</p><div class="row"><button class="btn primary" data-act="cli-new">+ Nuevo cliente</button><button class="btn" data-act="import">Importar fichero</button></div>
+    <h3 style="margin-top:18px;display:none">Reservas de tu página de citas</h3><p class="sub"></p></div>`;
+  return `<div class="head"><div><h2>Clientes</h2><p>${all.length - nPos} clientes · ${nPos} posibles clientes · ${dom.length} pagan por recibo domiciliado</p></div><div class="row"><button class="btn" data-act="exp-cli">Exportar clientes</button></div></div>
   <div class="grid2"><div>
-    <div class="filters"><input type="search" id="cli-q" placeholder="Buscar por nombre, CIF o código" value="${esc(S.q)}"></div>
-    ${all.length ? `<div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Pago</th><th class="r">Precio</th><th>SEPA</th></tr></thead><tbody>${cs.map(c => { const s = sepaReady(c); return `<tr class="click" data-cli="${esc(c.id)}" tabindex="0"><td><div class="cn">${esc(c.nombre)}${c.potencial ? '<span class="flag n">Potencial</span>' : ''}${c.tipoCliente === 'particular' ? '<span class="flag n">Particular</span>' : ''}</div><div class="cs">${esc(c.cif)} · ${esc(c.poblacion || '')}</div></td><td class="cs">${esc(c.formaPago || '—')}</td><td class="r num">${c.precio !== '' && c.precio != null ? money(num(c.precio)) : '<span class="cs">general</span>'}</td><td>${s.ok ? chip('c-ok', 'Listo') : s.skip ? '<span class="cs">—</span>' : `<span class="flag warn">${esc(s.why)}</span>`}</td></tr>`; }).join('')}</tbody></table></div>`
+    <div class="filters"><input type="search" id="cli-q" placeholder="Buscar por nombre, contacto, CIF o código" value="${esc(S.q)}"><div class="row">${[['todos', 'Todos'], ['clientes', 'Clientes'], ['posibles', 'Posibles clientes (' + nPos + ')']].map(([k, l]) => `<button class="btn sm ${F === k ? 'primary' : ''}" data-act="cli-f" data-v="${k}">${l}</button>`).join('')}</div></div>
+    ${all.length ? `<div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Pago</th><th class="r">Precio</th><th>SEPA</th></tr></thead><tbody>${cs.map(c => { const s = sepaReady(c); return `<tr class="click" data-cli="${esc(c.id)}" tabindex="0"><td><div class="cn">${esc(c.nombre)}${c.potencial ? '<span class="flag n">Posible cliente</span>' : ''}${c.tipoCliente === 'particular' ? '<span class="flag n">Particular</span>' : ''}</div><div class="cs">${esc([c.cif, c.poblacion, c.potencial ? c.contacto : '', c.potencial ? c.telefono : ''].filter(Boolean).join(' · '))}</div></td><td class="cs">${c.potencial ? `<button class="btn sm" data-act="cli-promote" data-id="${esc(c.id)}">Pasar a cliente</button>` : esc(c.formaPago || '—')}</td><td class="r num">${c.precio !== '' && c.precio != null ? money(num(c.precio)) : '<span class="cs">general</span>'}</td><td>${s.ok ? chip('c-ok', 'Listo') : s.skip ? '<span class="cs">—</span>' : `<span class="flag warn">${esc(s.why)}</span>`}</td></tr>`; }).join('')}</tbody></table></div>`
     : `<div class="empty"><h3>Sin clientes</h3><p>Importa tu fichero de clientes (Excel) o añádelos a mano.</p><div class="row"><button class="btn primary" data-act="import">Importar fichero</button></div></div>`}
   </div>${form}</div>`;
 }
@@ -847,7 +852,7 @@ function exportClientes(){
 
 document.addEventListener('click', e => {
   const n = e.target.closest('[data-nav]'); if (n) { go(n.dataset.nav); return; }
-  const cl = e.target.closest('[data-cli]'); if (cl) { S.editCli = clone(cliById(cl.dataset.cli)); S.dirty = false; render(); return; }
+  const cl = e.target.closest('[data-cli]'); if (cl && !e.target.closest('[data-act]')) { S.editCli = clone(cliById(cl.dataset.cli)); S.dirty = false; render(); return; }
   if (e.target.closest('a[href]')) return;
   const a = e.target.closest('[data-act]'); if (a && ACTS[a.dataset.act] && !a.disabled) { e.preventDefault(); ACTS[a.dataset.act](a); }
 });
@@ -883,7 +888,7 @@ document.addEventListener('submit', async e => {
   }
   if (e.target.id === 'cli-form') {
     const c = clone(S.editCli); if (!c.nombre?.trim()) { toast('Falta la razón social.', true); return; }
-    c.kind = 'cliente'; c.nombre = c.nombre.trim(); c.cif = normCif(c.cif); c.iban = ibanClean(c.iban); c.precio = String(c.precio ?? '').trim() === '' ? '' : num(c.precio);
+    c.kind = 'cliente'; c.nombre = c.nombre.trim(); c.potencial = c.potencial ? 'si' : false; c.cif = normCif(c.cif); c.iban = ibanClean(c.iban); c.precio = String(c.precio ?? '').trim() === '' ? '' : num(c.precio);
     if (c.iban && !ibanOk(c.iban)) { toast('El IBAN no es válido. Revísalo.', true); return; }
     const from = c._from; delete c._from; c.alias = c.alias || [];
     const id = c.id || ('cli_' + (c.cif || uid('n')));
@@ -1927,6 +1932,134 @@ ACTS['cert-f'] = el => { CERT.filtro = el.dataset.v; render(); };
 ACTS['cert-fact'] = el => { const d = S.docs.get(el.dataset.id); certPut(el.dataset.id, { facturado: d && d.facturado === 'si' ? '' : 'si' }); };
 ACTS['cert-renov'] = el => certPut(el.dataset.id, { renovado: today() });
 document.addEventListener('change', e => { const id = e.target.dataset && e.target.dataset.certVenta; if (id) certPut(id, { venta: num(e.target.value) }); });
+/* ===== reservas de la página de citas (Bookings) -> fichas de clientes y posibles clientes ===== */
+const RES_BUZON = () => cfg().bookingsBuzon || '';
+const RES_GENERIC = /^(gmail|googlemail|hotmail|outlook|live|msn|yahoo|ymail|icloud|me|telefonica|movistar|orange|vodafone|terra|ono|protonmail)\./i;
+const telNorm = s => String(s || '').replace(/\D/g, '').replace(/^(0034|34)(?=\d{9}$)/, '');
+function lev(a, b){ a = a || ''; b = b || ''; if (Math.abs(a.length - b.length) > 3) return 9; const d = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; }
+function resObjs(r){
+  const out = [], push = o => { if (o && typeof o === 'object') { if (Array.isArray(o)) o.forEach(push); else out.push(o); } };
+  const blocks = ((r && r.content) || []).filter(c => c && typeof c.text === 'string').map(c => c.text);
+  if (!blocks.length && r && r.payload) push(r.payload);
+  for (const t of blocks) {
+    try { push(JSON.parse(t)); continue; } catch (e) {}
+    let depth = 0, start = -1, inS = false, esc2 = false;
+    for (let i = 0; i < t.length; i++) { const ch = t[i];
+      if (inS) { if (esc2) esc2 = false; else if (ch === '\\') esc2 = true; else if (ch === '"') inS = false; continue; }
+      if (ch === '"') inS = true; else if (ch === '{') { if (!depth) start = i; depth++; } else if (ch === '}') { depth--; if (!depth && start >= 0) { try { push(JSON.parse(t.slice(start, i + 1))); } catch (e) {} start = -1; } } }
+  }
+  return out;
+}
+function resParse(ev){
+  const s = String(ev.summary || ev.body || ''), g = re => { const m = s.match(re); return m ? m[1].trim() : ''; };
+  const nombre = g(/(?:^|\n)\s*(?:Nombre|Name):\s*([^\r\n]+)/i), email = g(/(?:Correo electr[oó]nico|Email):\s*([^\s\r\n]+)/i).toLowerCase();
+  const tel = g(/(?:N[uú]mero de tel[eé]fono|Phone Number):\s*([^\r\n]+)/i), dir = g(/(?:Direcci[oó]n|Address):\s*([^\r\n]+)/i);
+  const subj = String(ev.subject || '').replace(/^(Canceled|Cancelado|Cancelada):\s*/i, ''), servicio = subj.split(' - ')[0].trim();
+  const empresa = (nombre.match(/\(([^)]+)\)\s*$/) || [])[1] || '';
+  const fecha = String((ev.start && ev.start.dateTime) || ev.start || '').slice(0, 10);
+  return { nombre: nombre.replace(/\s*\([^)]*\)\s*$/, '').trim(), empresa, email, tel: telNorm(tel), dir, servicio, fecha, cancelada: !!ev.isCancelled || /^cancel/i.test(String(ev.subject || '')) };
+}
+const nombreBonito2 = s => String(s || '').toLowerCase().replace(/(^|[\s'(-])\p{L}/gu, m => m.toUpperCase());
+function resMatch(c){
+  const cs = clientes(), m = cfg().resMap || {}, key = c.key;
+  if (m[key]) return m[key];
+  if (c.email) { const x = cs.find(k => (k.email || '').toLowerCase() === c.email || (k.emailsReserva || []).includes(c.email)); if (x) return x.id; }
+  if (c.tel) { const x = cs.find(k => telNorm(k.telefono) === c.tel); if (x) return x.id; }
+  const dom = (c.email.split('@')[1] || ''); if (dom && !RES_GENERIC.test(dom)) { const x = cs.find(k => (k.email || '').toLowerCase().split('@')[1] === dom); if (x) return x.id; }
+  if (c.empresa) { const n = normName(c.empresa); if (n.length > 3) { const x = cs.find(k => normName(k.nombre).includes(n)); if (x) return x.id; } }
+  if (c.nombre) { const n = normName(c.nombre); const x = cs.find(k => k.contacto && normName(k.contacto) === n); if (x) return x.id; }
+  return '';
+}
+async function resMcp(){
+  if (!MCP && window.claude && window.claude.use) { try { MCP = await window.claude.use('mcp'); } catch (e) {} }
+  if (!MCP) throw { code: 'local', message: 'Leer reservas solo funciona con Cierre abierto en claude.ai.' };
+  return MCP;
+}
+function resErr(e){
+  const c = e && e.code;
+  if (c === 'local') return e.message;
+  if (c === 'needs_reauth') return 'Vuelve a conectar Microsoft 365 en claude.ai, Ajustes, Conectores.';
+  if (c === 'server_not_connected' || c === 'selection_required') return 'Añade o elige el conector de Microsoft 365 en claude.ai, Ajustes, Conectores.';
+  if (c === 'not_in_manifest' || c === 'approval_required' || c === 'not_granted') return 'Para leer las reservas tienes que permitir a Cierre usar Microsoft 365 (menú Permisos del artefacto).';
+  if (c === 'blocked_by_policy') return 'Tu organización no permite leer el calendario desde aquí.';
+  if (c === 'server_unavailable') return 'Microsoft 365 no responde ahora mismo. Prueba en un momento.';
+  if (c === 'tool_error') return 'Outlook respondió con un error: ' + String(e.message || '').slice(0, 160);
+  return 'No se pudieron leer las reservas.';
+}
+const RES = { rows: null };
+async function resLeer(btn){
+  const t = btn && btn.textContent; if (btn) { btn.disabled = true; btn.textContent = 'Leyendo reservas…'; }
+  try {
+    const m = await resMcp(), evs = [];
+    for (let off = 0; off < 500; off += 25) {
+      const r = await m.callTool(M365, 'outlook_calendar_search', { query: '*', organizer: RES_BUZON(), afterDateTime: addDays(today(), -365), beforeDateTime: addDays(today(), 365), limit: 25, offset: off, order: 'oldest' }, { cache: false });
+      const os = resObjs(r), items = os.filter(o => o.subject != null), more = os.find(o => o.nextOffset != null);
+      evs.push(...items); if (!more || !items.length) break; off = num(more.nextOffset) - 25;
+    }
+    const by = {};
+    for (const ev of evs) { const p = resParse(ev); const key = p.email || (p.tel ? 'tel:' + p.tel : p.nombre ? 'n:' + normName(p.nombre) : ''); if (!key) continue;
+      const g = by[key] = by[key] || { key, citas: [] }; g.citas.push({ fecha: p.fecha, servicio: p.servicio, cancelada: p.cancelada });
+      if (!g.fecha || p.fecha >= g.fecha) Object.assign(g, { nombre: p.nombre, empresa: p.empresa || g.empresa || '', email: p.email || g.email || '', tel: p.tel || g.tel || '', dir: p.dir || g.dir || '', fecha: p.fecha }); }
+    const map = cfg().resMap || {};
+    RES.rows = Object.values(by).filter(g => map[g.key] !== 'ignorar').map(g => ({ ...g, sel: resMatch(g) }));
+    if (!evs.length) { toast('No hay reservas en tu calendario de Outlook en el último año.'); return; }
+    resModal();
+  } catch (e) { console.error('reservas', e); toast(resErr(e), true); }
+  finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = t; } }
+}
+function resCambios(g){
+  const c = g.sel && g.sel !== 'nuevo' && g.sel !== 'ignorar' ? cliById(g.sel) : null; if (!c) return [];
+  const out = [], ce = (c.email || '').toLowerCase();
+  if (g.email && g.email !== ce && !(c.emailsReserva || []).includes(g.email)) out.push({ k: 'email', label: `Correo: ${c.email || '(vacío)'} → ${g.email}`, on: !ce || lev(ce, g.email) <= 2 });
+  if (g.tel && g.tel !== telNorm(c.telefono)) out.push({ k: 'telefono', label: `Teléfono: ${c.telefono || '(vacío)'} → ${g.tel}`, on: true });
+  if (g.nombre && !c.contacto) out.push({ k: 'contacto', label: `Contacto: ${nombreBonito2(g.nombre)}`, on: true });
+  return out;
+}
+function resRowHTML(g, i){
+  const opts = clientes().filter(c => !c.baja).map(c => `<option value="${esc(c.id)}" ${g.sel === c.id ? 'selected' : ''}>${esc(c.nombre)}${c.potencial ? ' (posible)' : ''}</option>`).join('');
+  const ch = resCambios(g), linked = (cfg().resMap || {})[g.key] === g.sel && g.sel;
+  return `<tr data-res="${i}"><td><div class="cn">${esc(nombreBonito2(g.nombre) || g.email)}${g.empresa ? ' · ' + esc(g.empresa) : ''}</div><div class="cs">${esc(g.email || '')}${g.tel ? ' · ' + esc(g.tel) : ''}</div><div class="cs">${g.citas.length} cita${g.citas.length === 1 ? '' : 's'} · última ${fdmy(g.fecha)} · ${esc(g.citas[g.citas.length - 1].servicio || '')}</div></td>
+    <td><select class="sel-sm" data-res-sel="${i}" style="max-width:240px"><option value="">— Elegir —</option><option value="nuevo" ${g.sel === 'nuevo' ? 'selected' : ''}>+ Nuevo posible cliente</option><option value="ignorar" ${g.sel === 'ignorar' ? 'selected' : ''}>No es cliente (ignorar)</option>${opts}</select>${linked ? '<div class="cs">Ya vinculado</div>' : ''}</td>
+    <td>${ch.length ? ch.map(x => `<label style="display:flex;gap:6px;align-items:flex-start;font-size:12.5px"><input type="checkbox" style="width:auto;margin-top:2px" data-res-ch="${i}:${x.k}" ${x.on ? 'checked' : ''}> ${esc(x.label)}</label>`).join('') : '<span class="cs">' + (g.sel === 'nuevo' ? 'Se crea con los datos de la reserva' : g.sel === 'ignorar' ? 'No se volverá a proponer' : g.sel ? 'Sin cambios' : 'Elige a quién corresponde') + '</span>'}</td></tr>`;
+}
+function resModal(){
+  const rows = RES.rows;
+  modal('Datos de las reservas', `<p>${rows.length} contacto${rows.length === 1 ? '' : 's'} en tus reservas. Revisa a qué ficha corresponde cada uno y qué datos actualizar. Nada se cambia hasta que pulses «Aplicar».</p>
+    <div class="tbl-wrap" style="max-height:55vh;overflow:auto"><table><thead><tr><th>Reserva</th><th>Ficha</th><th>Actualizar</th></tr></thead><tbody id="res-body">${rows.map(resRowHTML).join('')}</tbody></table></div>`,
+    [{ label: 'Aplicar', cls: 'primary', on: () => { resAplicar(); } }]);
+  const card = document.querySelector('.modal-card'); if (card) card.style.maxWidth = '860px';
+}
+document.addEventListener('change', e => {
+  const i = e.target.dataset && e.target.dataset.resSel; if (i == null || !RES.rows) return;
+  RES.rows[+i].sel = e.target.value; const tr = document.querySelector(`tr[data-res="${i}"]`); if (tr) tr.outerHTML = resRowHTML(RES.rows[+i], +i);
+});
+async function resAplicar(){
+  const rows = RES.rows || [], aj = clone(S.docs.get('ajustes') || { kind: 'ajustes' }); aj.kind = 'ajustes'; aj.resMap = { ...(aj.resMap || {}) };
+  const chk = {}; document.querySelectorAll('[data-res-ch]').forEach(x => { chk[x.dataset.resCh] = x.checked; });
+  let nuevos = 0, act = 0;
+  for (let i = 0; i < rows.length; i++) { const g = rows[i]; if (!g.sel) continue;
+    if (g.sel === 'ignorar') { aj.resMap[g.key] = 'ignorar'; continue; }
+    const citas = g.citas.map(c => ({ fecha: c.fecha, servicio: c.servicio, cancelada: c.cancelada || undefined }));
+    if (g.sel === 'nuevo') {
+      const id = 'cli_res' + hash(g.key);
+      const d = { kind: 'cliente', nombre: g.empresa || nombreBonito2(g.nombre), contacto: nombreBonito2(g.nombre), email: g.email, telefono: g.tel, direccion: g.dir, cif: '', formaPago: '', precio: '', iban: '', mandatoRef: '', mandatoFecha: '', alias: [], potencial: 'si', origen: 'Reserva', reservas: citas };
+      if (await safe(() => Store.put(id, d))) { aj.resMap[g.key] = id; nuevos++; } continue;
+    }
+    const c = cliById(g.sel); if (!c) continue; const d = clone(c); delete d.id; let cambio = false;
+    for (const x of resCambios(g)) if (chk[i + ':' + x.k]) { if (x.k === 'email') d.email = g.email; if (x.k === 'telefono') d.telefono = g.tel; if (x.k === 'contacto') d.contacto = nombreBonito2(g.nombre); cambio = true; }
+    if (g.email && (d.email || '').toLowerCase() !== g.email) { d.emailsReserva = [...new Set([...(d.emailsReserva || []), g.email])]; }
+    const prev = JSON.stringify(d.reservas || []); const all = [...(d.reservas || [])]; for (const ci of citas) if (!all.some(a => a.fecha === ci.fecha && a.servicio === ci.servicio)) all.push(ci); d.reservas = all.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+    if (cambio || JSON.stringify(d.reservas) !== prev || aj.resMap[g.key] !== g.sel || d.emailsReserva !== c.emailsReserva) { if (await safe(() => Store.put(g.sel, d))) { if (cambio) act++; } }
+    aj.resMap[g.key] = g.sel;
+  }
+  aj.resUltima = today();
+  await safe(() => Store.put('ajustes', aj));
+  RES.rows = null; toast(`${act} ficha${act === 1 ? '' : 's'} actualizada${act === 1 ? '' : 's'} · ${nuevos} posible${nuevos === 1 ? '' : 's'} cliente${nuevos === 1 ? '' : 's'} nuevo${nuevos === 1 ? '' : 's'}`); render();
+}
+ACTS['res-leer'] = el => resLeer(el);
+ACTS['cli-f'] = el => { S.cliF = el.dataset.v; render(); };
+ACTS['cli-promote'] = el => { const c = cliById(el.dataset.id); if (!c) return; S.editCli = { ...clone(c), potencial: '' }; S.dirty = false; render(); S.dirty = true; scrollTo(0, 0); toast('Completa NIF, dirección y forma de pago y pulsa Guardar para pasarlo a cliente.'); };
+
 /* ===== mandatos SEPA (orden de domiciliación a nombre del distribuidor) ===== */
 const acreedor = () => { const i = ID(); return { nombre: i.nombre, marca: i.marca, nif: i.nif || '', dir: i.dir || '', email: i.email || '' }; };
 const MAN = { filtro: 'activos', q: '' };
